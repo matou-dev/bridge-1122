@@ -1,0 +1,16 @@
+# C3 autoplay companion WANT: vanilla members the dev-only companion
+# references, one per line (M = method, owner SRG + MCP name + SRG name +
+# descriptor + static 0|1). hub tools/run-client.sh (AUTOPLAY=1) derives
+# the narrow map from the pinned client jar + joined.tsrg and pin-checks
+# every line (same practice as the live WANT in tools/run-live.sh). No
+# snapshot lock on 1122 (Forge Maven ships no 1.12.2 snapshot CSVs; the
+# C3 server derive carries none either): the triple lock is pinned
+# joined.tsrg (mcp_config-1.12.2.zip, sha1-pinned by run-live.sh) +
+# javap exact-descriptor + static-ness against the pinned client jar +
+# MCP names cross-checked against mcp_stable-39 methods.csv
+# (func_71371_a=launchIntegratedServer, func_71400_g=shutdown,
+# func_71410_x=getMinecraft). A wrong MCP name dies loudly at runtime
+# (NoSuchMethodError), never silently.
+M net/minecraft/client/Minecraft getMinecraft func_71410_x ()Lnet/minecraft/client/Minecraft; 1
+M net/minecraft/client/Minecraft launchIntegratedServer func_71371_a (Ljava/lang/String;Ljava/lang/String;Lnet/minecraft/world/WorldSettings;)V 0
+M net/minecraft/client/Minecraft shutdown func_71400_g ()V 0

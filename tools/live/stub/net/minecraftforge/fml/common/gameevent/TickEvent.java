@@ -6,6 +6,8 @@ import net.minecraftforge.fml.relauncher.Side;
 /**
  * C1 compile stub, never runs (see Mod.java). Mirrors the 2860 shape:
  * side/phase live on the TickEvent parent, world on WorldTickEvent.
+ * ClientTickEvent (no world field) serves the dev-only autoplay companion
+ * (tools/autoplay/, never shipped) — same practice as bridge-1165.
  */
 public class TickEvent {
     public enum Type {
@@ -32,6 +34,18 @@ public class TickEvent {
         public WorldTickEvent(Side side, Phase phase, World world) {
             super(Type.WORLD, side, phase);
             this.world = world;
+        }
+    }
+
+    public static class ClientTickEvent extends TickEvent {
+        public ClientTickEvent(Phase phase) {
+            super(Type.CLIENT, Side.CLIENT, phase);
+        }
+    }
+
+    public static class ServerTickEvent extends TickEvent {
+        public ServerTickEvent(Phase phase) {
+            super(Type.SERVER, Side.SERVER, phase);
         }
     }
 }

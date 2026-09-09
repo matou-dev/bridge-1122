@@ -1,0 +1,10 @@
+# C3 autoplay Forge-surface pins (universal jar, never obfuscated): each
+# line is CLASS + grep pattern checked by hub tools/run-client.sh
+# (AUTOPLAY=1) via javap — same practice as the pin_uni checks in
+# tools/run-live.sh (C3 step 2c). Drift fails loudly.
+net.minecraftforge.fml.common.gameevent.TickEvent$ClientTickEvent ClientTickEvent(
+net.minecraftforge.fml.common.gameevent.TickEvent$ServerTickEvent ServerTickEvent(
+net.minecraftforge.fml.common.gameevent.TickEvent$Phase END
+net.minecraftforge.common.MinecraftForge EVENT_BUS
+net.minecraftforge.fml.common.Mod modid()
+net.minecraftforge.fml.common.eventhandler.EventBus register(

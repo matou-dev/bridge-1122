@@ -241,6 +241,9 @@ pin_uni() {
     || { echo "FAIL c3-live : universal pin unmet <$1 :: $2>"; exit 1; }
 }
 pin_uni 'net.minecraftforge.fml.common.gameevent.TickEvent$WorldTickEvent' 'world'
+pin_uni 'net.minecraftforge.fml.common.gameevent.TickEvent$ClientTickEvent' 'ClientTickEvent('
+pin_uni 'net.minecraftforge.fml.common.gameevent.TickEvent$ServerTickEvent' 'ServerTickEvent('
+pin_uni 'net.minecraftforge.common.MinecraftForge' 'EVENT_BUS'
 pin_uni 'net.minecraftforge.fml.common.gameevent.TickEvent' 'side'
 pin_uni 'net.minecraftforge.fml.common.gameevent.TickEvent' 'phase'
 pin_uni 'net.minecraftforge.fml.common.gameevent.TickEvent$Phase' 'END'
