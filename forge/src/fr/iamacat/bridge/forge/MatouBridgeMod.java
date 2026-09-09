@@ -23,7 +23,7 @@ import net.minecraftforge.fml.relauncher.Side;
  * <p>Only this package may touch MC/Forge; the decide/apply seam
  * ({@code fr.iamacat.bridge}) ships from {@code matou-spi} v1.1.0.
  */
-@Mod(modid = MatouBridgeMod.MODID, name = "MatouBridge", version = "1.0.0",
+@Mod(modid = MatouBridgeMod.MODID, name = "MatouBridge", version = "1.1.0",
         acceptableRemoteVersions = "*")
 public final class MatouBridgeMod {
     public static final String MODID = "matoubridge";

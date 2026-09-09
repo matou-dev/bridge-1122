@@ -7,6 +7,10 @@ Full notes per tag: https://github.com/matou-dev/bridge-1122/releases.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-09
+
+Versioned server drop: https://github.com/matou-dev/bridge-1122/releases/tag/v1.1.0
+
 - C1 scaffold: `forge/` ported to 1.12.2 (Forge 14.23.5.2860,
   `net.minecraftforge.fml`, `World.setBlockState` + `BlockPos` +
   `IBlockState`, `WorldProvider.getDimension()`), seam consumed from
