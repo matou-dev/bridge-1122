@@ -33,4 +33,6 @@ packages, `World.setBlockState` + `BlockPos` + `IBlockState`,
   in the provisioned 2860 jar, as `bridge-1710` does for 1614.
 
 Gate: `tools/check.sh` (etage 1 sibling-spi compile, etage 2
-forge-vs-stub compile, live skipped until C3).
+forge-vs-stub compile, live skipped until C3). `SPI_PIN` pins the
+validated SPI (hub `check-bridges.sh` refuses bridge drift: pins,
+forge file-set, `E_FORGE_*` catalog).

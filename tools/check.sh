@@ -20,6 +20,14 @@ echo "ok (no-legacy-matoulib)"
 # siblings, cf. hub README). Refus bruyant.
 SPI=../spi/java/src
 [ -d "$SPI" ] || { echo "FAIL bridge-skeleton : spi sibling absent (cloner hub+spi+bridge-1122 en siblings)"; exit 1; }
+# SPI_PIN : ce bridge est valide contre ce SPI-la, pas un autre. Un sibling
+# qui ne matche pas = bridge en avance/retard — re-valider puis bumper.
+PIN=$(tr -d '[:space:]' < SPI_PIN)
+[ -n "$PIN" ] || { echo "FAIL spi-pin : empty SPI_PIN"; exit 1; }
+want=$(git -C ../spi rev-list -n 1 "$PIN" 2>/dev/null) || { echo "FAIL spi-pin : unknown pin <$PIN> (fetch tags?)"; exit 1; }
+got=$(git -C ../spi rev-parse HEAD) || { echo "FAIL spi-pin : ../spi not a git checkout"; exit 1; }
+[ "$want" = "$got" ] || { echo "FAIL spi-pin : want $PIN ($want), sibling $got (re-validate, then bump SPI_PIN)"; exit 1; }
+echo "ok (spi-pin : $PIN)"
 mkdir -p build/sib
 javac --release 8 -d build/sib $(find "$SPI" -name '*.java')
 echo "ok (sib-spi)"
