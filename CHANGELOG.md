@@ -13,3 +13,10 @@ Full notes per tag: https://github.com/matou-dev/bridge-1122/releases.
   `matou-spi` v1.1.0 at identical FQNs (no pure copy here). Gate
   `tools/check.sh`: etage 1 sibling-spi compile, etage 2 forge-vs-stub
   compile green with no MC jars, live skipped until C3.
+- C2 content wiring: pure E2E `ForgeContentCheck` (same pattern as B2,
+  body in sync with `bridge-1710`'s copy) against the `../example1`
+  sibling (packs from the real `.matou` sources, fake recording world,
+  merge comparator, wired-pack 52 volume cells, loud refusals). Gate
+  etage 1 now requires the `../example1` sibling, enforces
+  `zero-mc-bridge` on `java/`, and runs the E2E; CI checks out the
+  `example1` sibling.

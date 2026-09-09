@@ -1,11 +1,13 @@
 #!/bin/sh
-# Gate bridge-1122 : anti-contamination + forge isole 1.12.2.
-# Etage 1 (toujours vert, sans MC) : sibling ../spi present + compile (ce
-# repo ne porte aucun java/ pur : le seam fr.iamacat.bridge vient de
-# matou-spi v1.1.0, couvert par BridgeCheck cote SPI). Etage 2 (Forge
-# 14.23.5.2860) : compile forge/ contre tools/live/stub (shape-only,
-# jamais execute) — vert sans MC_JAR. Etage 3 (live, C3) : pas de
-# tools/run-live.sh encore, skip. Jamais de chemin machine en dur ici.
+# Gate bridge-1122 : anti-contamination + contenu-wire + forge isole 1.12.2.
+# Etage 1 (toujours vert, sans MC) : siblings ../spi + ../example1 presents
+# + compile + E2E pur C2 (ForgeContentCheck, pattern B2 : packs issus des
+# vrais .matou, monde fake enregistreur ; ce repo ne porte aucun java/ pur :
+# le seam fr.iamacat.bridge vient de matou-spi v1.1.0, couvert par
+# BridgeCheck cote SPI). Etage 2 (Forge 14.23.5.2860) : compile forge/
+# contre tools/live/stub (shape-only, jamais execute) — vert sans MC_JAR.
+# Etage 3 (live, C3) : pas de tools/run-live.sh encore, skip. Jamais de
+# chemin machine en dur ici.
 set -eu
 cd "$(dirname "$0")/.."
 hits=$(rg -n --no-heading "fr\.iamacat\.matoulib" \
@@ -16,10 +18,13 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 echo "ok (no-legacy-matoulib)"
-# Etage 1 : compile contre le checkout sibling ../spi (convention
-# siblings, cf. hub README). Refus bruyant.
+# Etage 1 : compile contre les checkouts siblings ../spi + ../example1
+# (convention siblings, cf. hub README) + E2E pur C2. Refus bruyant.
 SPI=../spi/java/src
 [ -d "$SPI" ] || { echo "FAIL bridge-skeleton : spi sibling absent (cloner hub+spi+bridge-1122 en siblings)"; exit 1; }
+EX1=../example1/java/src
+[ -d "$EX1" ] || { echo "FAIL bridge-content : example1 sibling absent (cloner hub+spi+bridge-1122+example1 en siblings)"; exit 1; }
+[ -f ../example1/content/owned.matou ] || { echo "FAIL bridge-content : example1 content absent"; exit 1; }
 # SPI_PIN : ce bridge est valide contre ce SPI-la, pas un autre. Un sibling
 # qui ne matche pas = bridge en avance/retard — re-valider puis bumper.
 PIN=$(tr -d '[:space:]' < SPI_PIN)
@@ -28,9 +33,22 @@ want=$(git -C ../spi rev-list -n 1 "$PIN" 2>/dev/null) || { echo "FAIL spi-pin :
 got=$(git -C ../spi rev-parse HEAD) || { echo "FAIL spi-pin : ../spi not a git checkout"; exit 1; }
 [ "$want" = "$got" ] || { echo "FAIL spi-pin : want $PIN ($want), sibling $got (re-validate, then bump SPI_PIN)"; exit 1; }
 echo "ok (spi-pin : $PIN)"
+# C2 E2E pur : java/ ne touche jamais MC/Forge (ni 1.7.10 ni 1.12.2).
+# Seuls les imports comptent : les commentaires peuvent les nommer.
+# (net.minecraftforge.* matche deja net\.minecraft en prefixe, comme en 1710.)
+mc_hits=$(rg -n --no-heading "^\s*import\s+(net\.minecraft|cpw\.mods)" \
+  java --glob '!build/**' || true)
+if [ -n "$mc_hits" ]; then
+  echo "FAIL zero-mc-bridge :"
+  echo "$mc_hits"
+  exit 1
+fi
+echo "ok (zero-mc-bridge)"
 mkdir -p build/sib
-javac --release 8 -d build/sib $(find "$SPI" -name '*.java')
-echo "ok (sib-spi)"
+javac --release 8 -d build/sib $(find "$SPI" "$EX1" -name '*.java')
+echo "ok (sib-spi-ex1)"
+javac --release 8 -cp build/sib -d build/sib $(find java/test -name '*.java')
+java -cp build/sib fr.iamacat.bridge.ForgeContentCheck
 # Etage 2 : forge/ seul touche MC/Forge (1.12.2). Stub shape-only, pas de
 # MC_JAR requis : vert partout, le live C3 prouvera contre le vrai jar.
 mkdir -p forge/build
