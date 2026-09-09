@@ -30,13 +30,13 @@ packages, `World.setBlockState` + `BlockPos` + `IBlockState`,
   coexistence).
 - `tools/live/stub`: shape-only 1.12.2 API used by `forge/` (compile
   classpath only, never runs). Etage 2 compiles `forge/` against it —
-  green with no MC jars. `run-live.sh` (C3) will assert these members
-  in the provisioned 2860 jar, as `bridge-1710` does for 1614.
+  green with no MC jars. `run-live.sh` (C3) asserts these members
+  against the provisioned 2860 jars, as `bridge-1710` does for 1614.
 
 Gate: `tools/check.sh` (etage 1 siblings-spi-ex1 compile + pure E2E,
-etage 2 forge-vs-stub compile, live skipped until C3). `SPI_PIN` pins the
-validated SPI (hub `check-bridges.sh` refuses bridge drift: pins,
-forge file-set, `E_FORGE_*` catalog).
+etage 2 forge-vs-stub compile, etage 3 `LIVE=1` runs `tools/run-live.sh`).
+`SPI_PIN` pins the validated SPI (hub `check-bridges.sh` refuses bridge
+drift: pins, forge file-set, `E_FORGE_*` catalog).
 
 ## C2 content wiring (packs)
 
@@ -58,3 +58,49 @@ never hardcoded).
 - FML (`forge/`, MC only, ported in C1): `PackWire.bind` (load + configure
   + block + y `0..255`, fail fast at init), `MatouBridgeMod.onWorldTick`
   (server, `END`, dimension 0 → `applyTo`).
+
+## C3 live proof (Forge 2860 server run)
+
+Stage 2 compiles; only the game arbitrates runtime. C3 runs a real
+2860 dedicated server with the built jars and compares the world against
+the pure decision union — see `tools/run-live.sh` (manual gate, needs
+network once + Java 8; env-driven, no machine paths: `C3_DIR` /
+`JAVA8_HOME` / `BOOT_SECS` optional, `C3_OFFLINE=1` reuses cache).
+Opt-in: `LIVE=1 ./tools/check.sh` runs the live proof after etages
+1-2; default stays green without network / Java 8 (same skip pattern
+as 1.7.10).
+
+- 1.12.2 ships no `srg-mcp.srg`, so the reobf map derives inside the run
+  instead of being pinned as a file: `joined.tsrg` (from the pinned MCP
+  config) gives obf↔SRG per class, `javap` on the pinned vanilla server
+  jar disambiguates overloads and static-ness (exactly-one assert per
+  member). The map covers every vanilla member our `forge/` bytecode
+  references (constant-pool truth at C3 time): `getBlockFromName` →
+  `func_149684_b`, `getDefaultState` → `func_176223_P`, `setBlockState`
+  → `func_175656_a`, `provider` → `field_73011_w`. `getDimension` stays
+  unmapped on purpose: it is Forge-added (readable call sites in the
+  pinned universal, e.g. `DimensionManager`), hence runtime-final —
+  `Reobf` passes it through, and the verdict proves it behaviorally (a
+  wrong dim gate would skip every tick and come back world-empty).
+- Every stubbed Forge member is asserted in the provisioned universal
+  jar; every derived SRG line is re-asserted before use. Upstream pins
+  (installer / universal / vanilla server / MCP config / ASM sha1) fail
+  the run loudly on any drift.
+- The bridge jar is reobfuscated MCP→SRG (`tools/live/Reobf.java`, the
+  ForgeGradle `reobf` equivalent): runtime vanilla only declares SRG
+  names, so an un-reobfed jar dies linking (proven by constant-pool
+  inspection: zero MCP names left, `func_*` present, `getDimension`
+  untouched).
+- Verdict: boot with zero `NoSuch*`/`E_*` refusals, then chunks (0..1, -1..1)
+  at y=63..65 must equal the pure `ForgeContent.decideAll` union over the
+  live `packs.cfg` — plane cells at the wire y=63, volume cells at their
+  own y=64..65 (same per-shape-sensitive geometry as B3; the mod's writes
+  force chunk generation around the origin regardless of world spawn) —
+  stone only, nothing foreign, nothing missing (`tools/live/anvil.py`
+  + `CellUnion`). Same 1274 cells as the 1614 proof: same content, same
+  seam, second runtime.
+- Reproducibility: `tools/live/Dockerfile` (JDK 8 + python3 + curl + git,
+  non-root `builder` user), `C3_OFFLINE=1` cache reuse, `BUILD_ONLY=1
+  VERSION=x.y.z` versioned server drop (`dist/`, same reproducible-jar
+  path as the live run, `mcversion` 1.12.2). Jars stay Java 8 bytecode
+  (major 52 contract enforced on both paths).

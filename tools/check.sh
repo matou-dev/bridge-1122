@@ -6,7 +6,8 @@
 # le seam fr.iamacat.bridge vient de matou-spi v1.1.0, couvert par
 # BridgeCheck cote SPI). Etage 2 (Forge 14.23.5.2860) : compile forge/
 # contre tools/live/stub (shape-only, jamais execute) — vert sans MC_JAR.
-# Etage 3 (live, C3) : pas de tools/run-live.sh encore, skip. Jamais de
+# Etage 3 (live, C3) : LIVE=1 runs tools/run-live.sh (needs Java 8 +
+# network once, C3_OFFLINE=1 reuses cache), skip otherwise. Jamais de
 # chemin machine en dur ici.
 set -eu
 cd "$(dirname "$0")/.."
@@ -50,9 +51,15 @@ echo "ok (sib-spi-ex1)"
 javac --release 8 -cp build/sib -d build/sib $(find java/test -name '*.java')
 java -cp build/sib fr.iamacat.bridge.ForgeContentCheck
 # Etage 2 : forge/ seul touche MC/Forge (1.12.2). Stub shape-only, pas de
-# MC_JAR requis : vert partout, le live C3 prouvera contre le vrai jar.
+# MC_JAR requis : vert partout, le live C3 prouve contre le vrai jar
+# (etage 3, LIVE=1).
 mkdir -p forge/build
 javac --release 8 -cp build/sib -d forge/build $(find forge/src tools/live/stub -name '*.java')
 echo "ok (forge-2860-stub)"
-# Etage 3 (C3) : live opt-in, pas de harness encore.
-echo "skip live (C3, no run-live.sh)"
+# Etage 3 (C3) : live opt-in. Default skip keeps CI green without
+# network/Java 8; LIVE=1 fails loudly without them, never silently.
+if [ "${LIVE:-}" != "1" ]; then
+  echo "skip live (LIVE!=1)"
+  exit 0
+fi
+exec sh tools/run-live.sh
