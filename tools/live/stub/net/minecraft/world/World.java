@@ -2,6 +2,7 @@ package net.minecraft.world;
 
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.block.state.IBlockState;
+import net.minecraft.entity.Entity;
 
 /**
  * C1 compile stub: shape-only 1.12.2 vanilla API used by {@code forge/}
@@ -11,8 +12,13 @@ import net.minecraft.block.state.IBlockState;
  */
 public class World {
     public WorldProvider provider;
+    public boolean isRemote;
 
     public boolean setBlockState(BlockPos pos, IBlockState state) {
+        return false;
+    }
+
+    public boolean spawnEntity(Entity entity) {
         return false;
     }
 }

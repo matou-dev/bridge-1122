@@ -2,10 +2,12 @@
 # Gate bridge-1122 : anti-contamination + contenu-wire + forge isole 1.12.2.
 # Etage 1 (toujours vert, sans MC) : siblings ../spi + ../example1 presents
 # + compile + E2E pur C2 (ForgeContentCheck, pattern B2 : packs issus des
-# vrais .matou, monde fake enregistreur ; ce repo ne porte aucun java/ pur :
-# le seam fr.iamacat.bridge vient de matou-spi v1.1.0, couvert par
-# BridgeCheck cote SPI). Etage 2 (Forge 14.23.5.2860) : compile forge/
-# contre tools/live/stub (shape-only, jamais execute) — vert sans MC_JAR.
+# vrais .matou, monde fake enregistreur) + loot spike-loot (LootCheck :
+# DropStore/LootSeal/OperatorPolicy contre LootJob/LootTable, pattern 1710).
+# Le seam fr.iamacat.bridge vient de matou-spi v1.1.0, couvert par
+# BridgeCheck cote SPI ; le pur bridge-owned (loot, wire) vit dans java/src
+# (zero-MC). Etage 2 (Forge 14.23.5.2860) : compile forge/ contre
+# tools/live/stub (shape-only, jamais execute) — vert sans MC_JAR.
 # Etage 3 (live, C3) : LIVE=1 runs tools/run-live.sh (needs Java 8 +
 # network once, C3_OFFLINE=1 reuses cache), skip otherwise. Jamais de
 # chemin machine en dur ici.
@@ -45,11 +47,37 @@ if [ -n "$mc_hits" ]; then
   exit 1
 fi
 echo "ok (zero-mc-bridge)"
+# Les stubs ne tournent jamais (compile classpath only) — un final sur un
+# primitif y est une constante compile-time que javac plie dans les bytes
+# prod au lieu de lire le live (mesuré 2026-09-09 sur 1710 : event.x/y/z
+# pliés à 0,0,0 dans le hook spike, attrapé live). Refus.
+const_hits=$(rg -n --no-heading "final\s+(byte|short|int|long|float|double|boolean|char)\s+\w+\s*=" \
+  tools/live/stub tools/autoplay/stub 2>/dev/null || true)
+if [ -n "$const_hits" ]; then
+  echo "FAIL no-stub-const :"
+  echo "$const_hits"
+  exit 1
+fi
+echo "ok (no-stub-const)"
+# T3 registry gate : java/src pur ne connait aucun contenu par import — le
+# vocabulaire partage passe par le SPI (hub
+# decisions/SPI_STATE_VOCABULARY.md), jamais par un import lateral
+# (AGENTS.md sect. 3). Les tests gardent leurs imports (le comparateur lit
+# les deux cotes) ; forge/ garde les siens jusqu'au T4 pack-driven.
+ex1_hits=$(rg -n --no-heading "^\s*import\s+fr\.iamacat\.example1" \
+  java/src || true)
+if [ -n "$ex1_hits" ]; then
+  echo "FAIL no-lateral-import :"
+  echo "$ex1_hits"
+  exit 1
+fi
+echo "ok (no-lateral-import)"
 mkdir -p build/sib
-javac --release 8 -d build/sib $(find "$SPI" "$EX1" -name '*.java')
-echo "ok (sib-spi-ex1)"
+javac --release 8 -d build/sib $(find "$SPI" "$EX1" java/src -name '*.java')
+echo "ok (sib-spi-ex1-bridge)"
 javac --release 8 -cp build/sib -d build/sib $(find java/test -name '*.java')
 java -cp build/sib fr.iamacat.bridge.ForgeContentCheck
+java -cp build/sib fr.iamacat.bridge.loot.LootCheck
 # Etage 2 : forge/ seul touche MC/Forge (1.12.2). Stub shape-only, pas de
 # MC_JAR requis : vert partout, le live C3 prouve contre le vrai jar
 # (etage 3, LIVE=1).

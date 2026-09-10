@@ -134,7 +134,9 @@ echo "ok c3-live : server provisioned (pins verified)"
 #    forge/ bytecode references (verified by constant-pool scan at C3 time:
 #    getBlockFromName, getDefaultState, setBlockState, provider, plus the
 #    registration tranche: setHardness, getIdFromBlock, isOpaqueCube,
-#    Material/ROCK).
+#    Material/ROCK, plus the loot tranche: spawnEntity, EntityItem/ItemStack
+#    getItem, Items/diamond, Entity/world/posX/posY/posZ, World/isRemote,
+#    IBlockState/getBlock, Vec3i/getX/getY/getZ).
 #    WorldProvider.getDimension is NOT mapped on purpose: it is Forge-added
 #    (11 readable call sites in the pinned universal, e.g. DimensionManager),
 #    hence runtime-final — Reobf passes it through by design, and the live
@@ -159,6 +161,19 @@ WANT = [
     ("net/minecraft/block/Block", "getIdFromBlock", "(Lnet/minecraft/block/Block;)I", "method", True, "func_149682_b"),
     ("net/minecraft/block/Block", "isOpaqueCube", "(Lnet/minecraft/block/state/IBlockState;)Z", "method", False, "func_149662_c"),
     ("net/minecraft/block/material/Material", "ROCK", "Lnet/minecraft/block/material/Material;", "field", True, "field_151576_e"),
+    ("net/minecraft/world/World", "spawnEntity", "(Lnet/minecraft/entity/Entity;)Z", "method", False, "func_72838_d"),
+    ("net/minecraft/entity/item/EntityItem", "getItem", "()Lnet/minecraft/item/Item;", "method", False, "func_92059_d"),
+    ("net/minecraft/item/ItemStack", "getItem", "()Lnet/minecraft/item/Item;", "method", False, "func_77973_b"),
+    ("net/minecraft/init/Items", "diamond", "Lnet/minecraft/item/Item;", "field", True, "field_151045_i"),
+    ("net/minecraft/entity/Entity", "world", "Lnet/minecraft/world/World;", "field", False, "field_70170_p"),
+    ("net/minecraft/entity/Entity", "posX", "D", "field", False, "field_70165_t"),
+    ("net/minecraft/entity/Entity", "posY", "D", "field", False, "field_70165_u"),
+    ("net/minecraft/entity/Entity", "posZ", "D", "field", False, "field_70165_v"),
+    ("net/minecraft/world/World", "isRemote", "Z", "field", False, "field_72995_K"),
+    ("net/minecraft/block/state/IBlockState", "getBlock", "()Lnet/minecraft/block/Block;", "method", False, "func_177230_c"),
+    ("net/minecraft/util/math/Vec3i", "getX", "()I", "method", False, "func_177958_n"),
+    ("net/minecraft/util/math/Vec3i", "getY", "()I", "method", False, "func_177956_o"),
+    ("net/minecraft/util/math/Vec3i", "getZ", "()I", "method", False, "func_177952_p"),
 ]
 srg2obf, classes = {}, {}
 cur = None
@@ -176,6 +191,18 @@ for raw in tsrg.splitlines():
 def obf_desc(d):
     return re.sub(r"L([^;]+);",
                   lambda m: "L" + srg2obf.get(m.group(1), m.group(1)) + ";", d)
+
+# javap spells primitive field types by name (double, boolean, ...), never
+# by descriptor char — the loot tranche pins Entity/posX (D) and
+# World/isRemote (Z), so the field-type key maps single-char descriptors
+# (object types keep the obf_desc path above).
+PRIM = {"Z": "boolean", "B": "byte", "C": "char", "D": "double",
+        "F": "float", "I": "int", "J": "long", "S": "short"}
+
+def obf_ftype(d):
+    if d in PRIM:
+        return PRIM[d]
+    return obf_desc(d)[1:-1]
 
 def javap_flags(cls):
     # -> {(name, descriptor-or-F:type): is_static} from the notch server jar.
@@ -218,13 +245,13 @@ for row in WANT:
         if anchor is not None:
             found = [m for m in members if len(m) == 2 and m[1] == anchor]
             assert len(found) == 1, "E_SRG_DERIVE:no tsrg field <%s %s>" % (owner, anchor)
-            ftype_obf = obf_desc(desc)[1:-1]
+            ftype_obf = obf_ftype(desc)
             flags = javap_flags(obf_owner)
             assert flags.get((found[0][0], "F:" + ftype_obf)) == want_static, \
                 "E_SRG_DERIVE:field shape <%s %s>" % (owner, anchor)
             lines.append("FD: %s/%s %s/%s" % (owner, anchor, owner, mcp))
             continue
-        ftype_obf = obf_desc(desc)[1:-1]
+        ftype_obf = obf_ftype(desc)
         flags = javap_flags(obf_owner)
         flds = [n for (n, d), st in flags.items()
                 if d == "F:" + ftype_obf and st == want_static]
@@ -232,7 +259,7 @@ for row in WANT:
         hits = [m for m in members if len(m) == 2 and m[0] == flds[0]]
         assert len(hits) == 1, "E_SRG_DERIVE:no tsrg field <%s %s>" % (owner, mcp)
         lines.append("FD: %s/%s %s/%s" % (owner, hits[0][1], owner, mcp))
-assert len(lines) == 8, "E_SRG_DERIVE:want 8 lines, got %d" % len(lines)
+assert len(lines) == 21, "E_SRG_DERIVE:want 21 lines, got %d" % len(lines)
 open(outpath, "w").write("\n".join(lines) + "\n")
 print("ok c3-live : narrow SRG derived (%d lines)" % len(lines))
 EOF
@@ -255,10 +282,23 @@ pin_method "net/minecraft/block/Block/getIdFromBlock" "(Lnet/minecraft/block/Blo
 pin_method "net/minecraft/block/Block/isOpaqueCube" "(Lnet/minecraft/block/state/IBlockState;)Z"
 pin_field "net/minecraft/world/World/provider"
 pin_field "net/minecraft/block/material/Material/ROCK"
+pin_method "net/minecraft/world/World/spawnEntity" "(Lnet/minecraft/entity/Entity;)Z"
+pin_method "net/minecraft/entity/item/EntityItem/getItem" "()Lnet/minecraft/item/Item;"
+pin_method "net/minecraft/item/ItemStack/getItem" "()Lnet/minecraft/item/Item;"
+pin_field "net/minecraft/init/Items/diamond"
+pin_field "net/minecraft/entity/Entity/world"
+pin_field "net/minecraft/entity/Entity/posX"
+pin_field "net/minecraft/entity/Entity/posY"
+pin_field "net/minecraft/entity/Entity/posZ"
+pin_field "net/minecraft/world/World/isRemote"
+pin_method "net/minecraft/block/state/IBlockState/getBlock" "()Lnet/minecraft/block/Block;"
+pin_method "net/minecraft/util/math/Vec3i/getX" "()I"
+pin_method "net/minecraft/util/math/Vec3i/getY" "()I"
+pin_method "net/minecraft/util/math/Vec3i/getZ" "()I"
 grep -q "getDimension" "$SRG_NARROW" \
   && { echo "FAIL c3-live : getDimension must stay unmapped (Forge-added, runtime-final)"; exit 1; }
-[ "$(grep -c . "$SRG_NARROW")" = "8" ] \
-  || { echo "FAIL c3-live : narrow map drift (want 8 lines)"; exit 1; }
+[ "$(grep -c . "$SRG_NARROW")" = "21" ] \
+  || { echo "FAIL c3-live : narrow map drift (want 21 lines)"; exit 1; }
 echo "ok c3-live : stubs pinned to derived SRG"
 
 # 2c. Pin every stubbed Forge member against the provisioned 2860 universal.
@@ -286,6 +326,12 @@ pin_uni 'net.minecraftforge.fml.common.Mod$EventBusSubscriber' 'modid()'
 pin_uni 'net.minecraftforge.event.RegistryEvent$Register' 'getRegistry('
 pin_uni 'net.minecraftforge.registries.IForgeRegistry' 'register('
 pin_uni 'net.minecraftforge.registries.IForgeRegistryEntry' 'setRegistryName('
+pin_uni 'net.minecraftforge.event.world.BlockEvent' 'BlockPos pos'
+pin_uni 'net.minecraftforge.event.world.BlockEvent' 'IBlockState state'
+pin_uni 'net.minecraftforge.event.world.BlockEvent' 'World world'
+pin_uni 'net.minecraftforge.event.world.BlockEvent$HarvestDropsEvent' 'HarvestDropsEvent('
+pin_uni 'net.minecraftforge.event.entity.living.LivingEvent' 'getEntityLiving('
+pin_uni 'net.minecraftforge.event.entity.living.LivingDropsEvent' 'LivingDropsEvent('
 echo "ok c3-live : forge stubs pinned to universal"
 
 # 3. Build all mod jars with Java 8. forge/ compiles against the pinned
@@ -294,8 +340,9 @@ echo "ok c3-live : forge stubs pinned to universal"
 #    commit + same toolchain == same bytes, see normjar), manifests carry
 #    VERSION, the bridge jar embeds mcmod.info.
 #    These are the exact bytes the live run proves AND the release ships.
-#    (No java/ stage: the pure seam ships from matou-spi, this repo carries
-#    only its Forge side.)
+#    Bridge-owned pure (java/src: loot store/seal, operator policy) compiles
+#    beside the seam and stages into the forge classes (same shape as 1710:
+#    java/ ships inside the bridge jar, never standalone).
 BLD="$C3_DIR/build"
 rm -rf "$BLD" \
   || { echo "FAIL c3-live : cannot clear <$BLD> (root-owned docker leftovers? point C3_DIR at a user-owned dir)"; exit 1; }
@@ -303,7 +350,10 @@ mkdir -p "$BLD/spi" "$BLD/ex1" "$BLD/mini" "$BLD/forge" "$BLD/jars"
 "$J8/javac" -source 8 -target 8 -nowarn -d "$BLD/spi" $(find ../spi/java/src -name '*.java')
 "$J8/javac" -source 8 -target 8 -nowarn -cp "$BLD/spi" -d "$BLD/ex1" $(find ../example1/java/src -name '*.java')
 "$J8/javac" -source 8 -target 8 -nowarn -cp "$BLD/spi" -d "$BLD/mini" $(find ../minimap/java/src -name '*.java')
-"$J8/javac" -source 8 -target 8 -nowarn -cp "$BLD/spi:$BLD/ex1" -d "$BLD/forge" $(find tools/live/stub forge/src -name '*.java')
+"$J8/javac" -source 8 -target 8 -nowarn -cp "$BLD/spi:$BLD/ex1" -d "$BLD/bridge" $(find java/src -name '*.java')
+"$J8/javac" -source 8 -target 8 -nowarn -cp "$BLD/spi:$BLD/ex1:$BLD/bridge" -d "$BLD/forge" $(find tools/live/stub forge/src -name '*.java')
+# Bridge-owned pure stages into the forge classes (ships in the bridge jar).
+cp -r "$BLD/bridge/"* "$BLD/forge/"
 EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
 printf 'Manifest-Version: 1.0\nImplementation-Version: %s\n' "$VERSION" > "$BLD/MANIFEST.MF"
 cat > "$BLD/mcmod.info" <<EOF
@@ -436,9 +486,9 @@ echo "ok c3-live : server ran ($BOOT_SECS s)"
 #    the rolling server log — FML splits output across both).
 LOGS="$SERV/boot-c3.log"
 [ -f "$SERV/logs/latest.log" ] && LOGS="$LOGS $SERV/logs/latest.log"
-if grep -a -q "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|Encountered an unexpected exception" $LOGS; then
+if grep -a -q "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|Encountered an unexpected exception" $LOGS; then
   echo "FAIL c3-live : runtime refusal (see $SERV/boot-c3.log)"
-  grep -a -m5 "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|Caused by" $LOGS
+  grep -a -m5 "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|Caused by" $LOGS
   exit 1
 fi
 grep -a -q "matoubridge" $LOGS \
