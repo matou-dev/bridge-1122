@@ -11,14 +11,12 @@ import fr.iamacat.bridge.spawn.SpawnSeal;
 import fr.iamacat.bridge.spike.MinedStore;
 import fr.iamacat.bridge.spike.RepopJob;
 import fr.iamacat.bridge.spike.RepopSeal;
-import fr.iamacat.example1.LootJob;
-import fr.iamacat.example1.LootTable;
-import fr.iamacat.example1.SpawnJob;
-import fr.iamacat.example1.SpawnTable;
 import fr.iamacat.spi.Cell;
 import fr.iamacat.spi.ContentPack;
 import fr.iamacat.spi.LootStates;
 import fr.iamacat.spi.MatouId;
+import fr.iamacat.spi.MatouJob;
+import fr.iamacat.spi.PolicyPack;
 import fr.iamacat.spi.Snapshot;
 import fr.iamacat.spi.SpawnStates;
 import fr.iamacat.spi.StateVocabulary;
@@ -64,10 +62,10 @@ import net.minecraftforge.fml.relauncher.Side;
  * harvest-drops events, server side, dim 0 only) and mob kills on
  * {@link #onKill} (Forge living-drops events, same scope) into the
  * bridge-owned {@link DropStore}; every server tick {@link #lootTick} seals
- * the store plus the wired {@link LootTable} beside the first wire's pack
+ * the store plus the wired loot table beside the first wire's pack
  * states (the pack-served loot vocabulary, T3 registry — hub
- * {@code decisions/SPI_STATE_VOCABULARY.md}) and the pure {@link LootJob}
- * decides what drops. The ore scope is the packs.cfg wire-block column (T2
+ * {@code decisions/SPI_STATE_VOCABULARY.md}) and the pure pack-served
+ * loot job decides what drops. The ore scope is the packs.cfg wire-block column (T2
  * operator-override tranche, hub decisions/SPAWN.md — no bridge constant
  * names a loot block); the per-harvest count is the content
  * {@code drop_count} unless the operator {@code loot.count} wins. Due
@@ -94,8 +92,8 @@ import net.minecraftforge.fml.relauncher.Side;
  * {@code getDimension} passthrough.
  *
  * <p>Spawn (event-sourced, hub decisions/SPAWN.md, custom entity): the
- * pure {@link SpawnJob} reads the bridge-owned {@link SpawnStore} census
- * plus the wired {@link SpawnTable} beside the first wire's pack states
+ * pure pack-served spawn job reads the bridge-owned {@link SpawnStore} census
+ * plus the wired spawn table beside the first wire's pack states
  * (the pack-served spawn vocabulary, T3 registry — hub
  * {@code decisions/SPI_STATE_VOCABULARY.md}) and decides budgeted spawns;
  * due spawns land as the registered custom beast ({@link MatouEntity},
@@ -172,10 +170,12 @@ public final class MatouBridgeMod {
     private final MinedStore mined = new MinedStore();
     private final RepopJob repop = new RepopJob();
     private final DropStore drops = new DropStore();
-    private final LootJob loot = new LootJob();
+    private MatouJob<List<String>> loot;
     private final SpawnStore census = new SpawnStore();
-    private final SpawnJob spawn = new SpawnJob();
+    private MatouJob<List<String>> spawn;
     private Map<String, String> lootTable;
+    private String oreKind;
+    private String beastKind;
     private StateVocabulary lootVocab;
     private Block stone;
     private String spawnMob;
@@ -239,15 +239,41 @@ public final class MatouBridgeMod {
     }
 
     /**
-     * Loot wiring: one table per bridge from the packs' owned content
-     * (parsed once, like registration — never on the tick path), the
-     * content {@code drop_count} unless the operator {@code loot.count}
-     * wins, and the ore scope from the operator wire-block column (T2
-     * operator-override tranche — no bridge constant names a loot
-     * block). No owned file anywhere means loot stays passive (Q1
-     * cohabitation): the hooks gate on the null table. Several distinct
-     * owned files refuse loudly — silent table picks are defaults.
-     */
+      * T4 pack-driven policy (hub
+      * {@code decisions/SPI_STATE_VOCABULARY.md}): tables, jobs and harvest
+      * kinds come from the first wire's reflectively loaded pack at wire
+      * time (parse-once, never on the tick path — the pack sealed them
+      * beside its states), so the forge wire carries no content import.
+      * A pack serving no policy refuses loudly — wiring numbers the pack
+      * never sealed would be a silent default.
+      */
+    private PolicyPack policy(String code) {
+        if (wires.isEmpty()) {
+            throw new IllegalStateException(code + ":nowire (want a "
+                    + "wired pack to serve the policy)");
+        }
+        ContentPack pack = wires.get(0).pack();
+        if (!(pack instanceof PolicyPack)) {
+            throw new IllegalArgumentException(code + ":nopolicy <"
+                    + pack.getClass().getName() + "> (pack serves no "
+                    + "loot/spawn policy)");
+        }
+        return (PolicyPack) pack;
+    }
+
+    /**
+      * Loot wiring: one table per bridge from the first wire's pack policy
+      * (parsed once at pack wire time, like registration — never on the
+      * tick path), the content {@code drop_count} unless the operator
+      * {@code loot.count} wins, and the ore scope from the operator
+      * wire-block column (T2 operator-override tranche — no bridge constant
+      * names a loot block). Harvest kinds come from the same policy (never
+      * content literals here): a table missing a served kind refuses
+      * loudly — an unpaid kind would be a silent no-drop. No owned file
+      * anywhere means loot stays passive (Q1 cohabitation): the hooks gate
+      * on the null table. Several distinct owned files refuse loudly —
+      * silent table picks are defaults.
+      */
     private void wireLoot(List<Packs.PackSpec> specs) {
         Set<String> owned = new HashSet<String>();
         for (Packs.PackSpec spec : specs) {
@@ -265,9 +291,19 @@ public final class MatouBridgeMod {
         }
         ownedPath = owned.iterator().next();
         lootVocab = vocabulary(LootStates.SCOPE, "E_LOOT_SEAL");
-        LootTable wired = LootTable.fromFile(ownedPath);
-        lootTable = wired.drops();
-        lootCount = OperatorPolicy.effectiveLootCount(wired.count(), specs);
+        PolicyPack policy = policy("E_LOOT_POLICY");
+        oreKind = policy.lootOreKind();
+        beastKind = policy.lootBeastKind();
+        lootTable = policy.lootDrops();
+        if (!lootTable.containsKey(oreKind)
+                || !lootTable.containsKey(beastKind)) {
+            throw new IllegalArgumentException("E_LOOT_TABLE:kind <"
+                    + new ArrayList<String>(lootTable.keySet())
+                    + "> (want <" + oreKind + "> + <" + beastKind + ">)");
+        }
+        loot = policy.lootJob();
+        lootCount = OperatorPolicy.effectiveLootCount(policy.lootCount(),
+                specs);
         for (String name : OperatorPolicy.wireBlocks(specs)) {
             Block block = Block.getBlockFromName(name);
             if (block == null) {
@@ -290,11 +326,11 @@ public final class MatouBridgeMod {
     }
 
     /**
-     * Spawn wiring: the single mob ref plus its spec hp plus the
-     * effective spawn policy from the same owned content the loot table
-     * came from (parsed once, like registration — never on the tick
-     * path): content cap/budget/band unless the operator
-     * {@code spawn.*} wins (T2 operator-override tranche). The hp lands
+      * Spawn wiring: the single mob ref plus its spec hp plus the
+      * effective spawn policy from the first wire's pack policy (parsed
+      * once at pack wire time, like registration — never on the tick
+      * path): content cap/budget/band unless the operator
+      * {@code spawn.*} wins (T2 operator-override tranche). The hp lands
      * on the beast's max-health attribute at every landing (hp tranche,
      * hub decisions/SPAWN.md) — a spec field with no live reader would
      * be a silent default; the same holds for the effective policy. No
@@ -306,11 +342,13 @@ public final class MatouBridgeMod {
             return;
         }
         spawnVocab = vocabulary(SpawnStates.SCOPE, "E_SPAWN_SEAL");
-        SpawnTable table = SpawnTable.fromFile(ownedPath);
-        spawnMob = table.mob();
-        spawnHp = table.hp();
-        long[] eff = OperatorPolicy.effectiveSpawn(table.cap(),
-                table.budget(), table.yMin(), table.yMax(), specs);
+        PolicyPack policy = policy("E_SPAWN_POLICY");
+        spawnMob = policy.spawnMob();
+        spawnHp = policy.spawnHp();
+        spawn = policy.spawnJob();
+        long[] eff = OperatorPolicy.effectiveSpawn(policy.spawnCap(),
+                policy.spawnBudget(), policy.spawnYMin(),
+                policy.spawnYMax(), specs);
         spawnCap = eff[0];
         spawnBudget = eff[1];
         spawnYMin = eff[2];
@@ -428,7 +466,7 @@ public final class MatouBridgeMod {
         // hierarchy walk only maps the exact bytecode owner.
         Vec3i p = event.getPos();
         String harvest = Cell.of(p.getX(), p.getY(), p.getZ(),
-                LootJob.ORE).render();
+                oreKind).render();
         drops.record(harvest, tick);
         System.out.println("[MatouBridge] loot recorded <" + harvest
                 + "> at tick " + tick);
@@ -474,7 +512,7 @@ public final class MatouBridgeMod {
         int x = (int) Math.floor(body.posX);
         int y = (int) Math.floor(body.posY);
         int z = (int) Math.floor(body.posZ);
-        String harvest = Cell.of(x, y, z, LootJob.BEAST).render();
+        String harvest = Cell.of(x, y, z, beastKind).render();
         drops.record(harvest, tick);
         System.out.println("[MatouBridge] loot recorded <" + harvest
                 + "> at tick " + tick);
