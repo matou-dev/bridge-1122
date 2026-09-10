@@ -183,10 +183,15 @@ WANT = [
     # list, the max-health attribute round-trip. SRG anchors are
     # load-bearing throughout: ()I, ()F and (F)V each name several Entity
     # / EntityLivingBase members (measured: getEntityId shares ()I with
-    # five others, getMaxHealth shares ()F with seven — the 1710 SRG name
-    # does NOT carry over either: getEntityId is func_82145_z on 2860,
-    # never func_70077_b), so the anchor picks the intended one.
-    ("net/minecraft/entity/Entity", "getEntityId", "()I", "method", False, "func_82145_z"),
+    # five others, getMaxHealth shares ()F with seven), so the anchor
+    # picks the intended one. Anchors are tsrg-measured, never recalled:
+    # the first spawn run died census-blind because getEntityId was
+    # anchored func_82145_z from memory — notch Z() returns constant 1
+    # (measured via javap -c), every landing recorded under one id, the
+    # cap veto blind, breach at worldTick 6. The id getter is the method
+    # returning the ctor-counter field equals/hashCode use (measured via
+    # javap -c: obf S), i.e. func_145782_y.
+    ("net/minecraft/entity/Entity", "getEntityId", "()I", "method", False, "func_145782_y"),
     ("net/minecraft/entity/Entity", "isDead", "Z", "field", False, "field_70128_L"),
     ("net/minecraft/world/World", "loadedEntityList", "Ljava/util/List;", "field", False, "field_72996_f"),
     ("net/minecraft/entity/Entity", "setPositionAndRotation", "(DDDFF)V", "method", False, "func_70080_a"),
