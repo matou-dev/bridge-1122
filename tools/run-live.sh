@@ -143,6 +143,12 @@ echo "ok c3-live : server provisioned (pins verified)"
 #    World/loadedEntityList, EntityLivingBase/getEntityAttribute/
 #    getMaxHealth/setHealth, IAttributeInstance/setBaseValue,
 #    SharedMonsterAttributes/maxHealth).
+#    The repop tranche (hub decisions/REPOP_SPIKE.md, T1 stone) adds no
+#    vanilla member: the break hook reads world/pos/state (Forge getters,
+#    pinned below) + isRemote/provider/getDimension (passthrough) +
+#    IBlockState/getBlock + Vec3i/getX/getY/getZ, the stone resolve and
+#    the sink land reuse getBlockFromName/getDefaultState/setBlockState —
+#    all pinned by earlier tranches, so the narrow map stays 30 lines.
 #    WorldProvider.getDimension is NOT mapped on purpose: it is Forge-added
 #    (11 readable call sites in the pinned universal, e.g. DimensionManager),
 #    hence runtime-final — Reobf passes it through by design, and the live
@@ -371,6 +377,7 @@ pin_uni 'net.minecraftforge.registries.IForgeRegistryEntry' 'setRegistryName('
 pin_uni 'net.minecraftforge.event.world.BlockEvent' 'getWorld('
 pin_uni 'net.minecraftforge.event.world.BlockEvent' 'getPos('
 pin_uni 'net.minecraftforge.event.world.BlockEvent' 'getState('
+pin_uni 'net.minecraftforge.event.world.BlockEvent$BreakEvent' 'BreakEvent('
 pin_uni 'net.minecraftforge.event.world.BlockEvent$HarvestDropsEvent' 'HarvestDropsEvent('
 pin_uni 'net.minecraftforge.event.entity.living.LivingEvent' 'getEntityLiving('
 pin_uni 'net.minecraftforge.event.entity.living.LivingDropsEvent' 'LivingDropsEvent('
@@ -398,10 +405,10 @@ echo "ok c3-live : forge stubs pinned to universal"
 #    commit + same toolchain == same bytes, see normjar), manifests carry
 #    VERSION, the bridge jar embeds mcmod.info.
 #    These are the exact bytes the live run proves AND the release ships.
-#    Bridge-owned pure (java/src: loot store/seal, spawn store/seal,
-#    operator policy) compiles beside the seam and stages into the forge
-#    classes (same shape as 1710: java/ ships inside the bridge jar, never
-#    standalone).
+#    Bridge-owned pure (java/src: spike store/seal, loot store/seal,
+#    spawn store/seal, operator policy) compiles beside the seam and
+#    stages into the forge classes (same shape as 1710: java/ ships
+#    inside the bridge jar, never standalone).
 BLD="$C3_DIR/build"
 rm -rf "$BLD" \
   || { echo "FAIL c3-live : cannot clear <$BLD> (root-owned docker leftovers? point C3_DIR at a user-owned dir)"; exit 1; }

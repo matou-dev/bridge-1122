@@ -38,8 +38,19 @@ public class BlockEvent extends Event {
         return state;
     }
 
-    public static class HarvestDropsEvent extends BlockEvent {
-        public HarvestDropsEvent(World world, BlockPos pos,
+    /**
+     * Repop spike: the bridge hook only reads world/pos/state through the
+     * base getters (the 1.7.10 public-field shape does not port). The real
+     * event ctor (player-authored post) grows here with the companion
+     * tranche, same discipline as the loot harvest event below.
+     */
+    public static class BreakEvent extends BlockEvent {
+        protected BreakEvent(World world, BlockPos pos, IBlockState state) {
+            super(world, pos, state);
+        }
+    }
+
+    public static class HarvestDropsEvent extends BlockEvent {        public HarvestDropsEvent(World world, BlockPos pos,
                 IBlockState state, int fortuneLevel, float dropChance,
                 List<ItemStack> drops, EntityPlayer harvester,
                 boolean isSilkTouching) {
