@@ -1,15 +1,26 @@
 package fr.iamacat.bridge.forge;
 
+import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
+
 /**
- * Tranche-1 parity shell (see hub decisions/REGISTRATION.md, Ports):
- * same basename as bridge-1710's generic MatouBlock so hub
- * tools/check-bridges.sh holds its forge file-set. Never referenced by
- * this bridge's mod (no preInit registration yet) — this bridge's own
- * registration tranche rewrites it version-native and live-proves it.
- * Zero MC imports by design: compiles anywhere, ships nothing.
+ * Registration landing (see hub decisions/REGISTRATION.md): the one
+ * generic Forge block every content block registers as. Hardness lands
+ * via the setter — never hardcoded per content, never a subclass per
+ * content. Opacity has no vanilla slot on 1.12.2 (no settable field,
+ * and project-class method declarations pass the reobfuscator through
+ * unrenamed, so an isOpaqueCube override would be a silent overload):
+ * translucent specs refuse loudly at registration time, never default.
+ * Only this package may touch {@code net.minecraft} /
+ * {@code net.minecraftforge}.
  */
-public final class MatouBlock {
-    private MatouBlock() {
-        throw new AssertionError("E_REG_SHELL:unwired parity shell");
+public final class MatouBlock extends Block {
+    /**
+     * Args are pre-validated by the registering mod (E_REG_* owns the
+     * refusals); the constructor only lands them.
+     */
+    public MatouBlock(float hardness) {
+        super(Material.ROCK);
+        setHardness(hardness);
     }
 }

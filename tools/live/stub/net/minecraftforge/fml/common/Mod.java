@@ -22,4 +22,9 @@ public @interface Mod {
     @Retention(RetentionPolicy.RUNTIME)
     @interface EventHandler {
     }
+
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface EventBusSubscriber {
+        String modid() default "";
+    }
 }
