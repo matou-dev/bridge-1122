@@ -162,13 +162,13 @@ WANT = [
     ("net/minecraft/block/Block", "isOpaqueCube", "(Lnet/minecraft/block/state/IBlockState;)Z", "method", False, "func_149662_c"),
     ("net/minecraft/block/material/Material", "ROCK", "Lnet/minecraft/block/material/Material;", "field", True, "field_151576_e"),
     ("net/minecraft/world/World", "spawnEntity", "(Lnet/minecraft/entity/Entity;)Z", "method", False, "func_72838_d"),
-    ("net/minecraft/entity/item/EntityItem", "getItem", "()Lnet/minecraft/item/Item;", "method", False, "func_92059_d"),
+    ("net/minecraft/entity/item/EntityItem", "getItem", "()Lnet/minecraft/item/ItemStack;", "method", False, "func_92059_d"),
     ("net/minecraft/item/ItemStack", "getItem", "()Lnet/minecraft/item/Item;", "method", False, "func_77973_b"),
     ("net/minecraft/init/Items", "diamond", "Lnet/minecraft/item/Item;", "field", True, "field_151045_i"),
     ("net/minecraft/entity/Entity", "world", "Lnet/minecraft/world/World;", "field", False, "field_70170_p"),
     ("net/minecraft/entity/Entity", "posX", "D", "field", False, "field_70165_t"),
-    ("net/minecraft/entity/Entity", "posY", "D", "field", False, "field_70165_u"),
-    ("net/minecraft/entity/Entity", "posZ", "D", "field", False, "field_70165_v"),
+    ("net/minecraft/entity/Entity", "posY", "D", "field", False, "field_70163_u"),
+    ("net/minecraft/entity/Entity", "posZ", "D", "field", False, "field_70161_v"),
     ("net/minecraft/world/World", "isRemote", "Z", "field", False, "field_72995_K"),
     ("net/minecraft/block/state/IBlockState", "getBlock", "()Lnet/minecraft/block/Block;", "method", False, "func_177230_c"),
     ("net/minecraft/util/math/Vec3i", "getX", "()I", "method", False, "func_177958_n"),
@@ -283,7 +283,7 @@ pin_method "net/minecraft/block/Block/isOpaqueCube" "(Lnet/minecraft/block/state
 pin_field "net/minecraft/world/World/provider"
 pin_field "net/minecraft/block/material/Material/ROCK"
 pin_method "net/minecraft/world/World/spawnEntity" "(Lnet/minecraft/entity/Entity;)Z"
-pin_method "net/minecraft/entity/item/EntityItem/getItem" "()Lnet/minecraft/item/Item;"
+pin_method "net/minecraft/entity/item/EntityItem/getItem" "()Lnet/minecraft/item/ItemStack;"
 pin_method "net/minecraft/item/ItemStack/getItem" "()Lnet/minecraft/item/Item;"
 pin_field "net/minecraft/init/Items/diamond"
 pin_field "net/minecraft/entity/Entity/world"
@@ -326,9 +326,9 @@ pin_uni 'net.minecraftforge.fml.common.Mod$EventBusSubscriber' 'modid()'
 pin_uni 'net.minecraftforge.event.RegistryEvent$Register' 'getRegistry('
 pin_uni 'net.minecraftforge.registries.IForgeRegistry' 'register('
 pin_uni 'net.minecraftforge.registries.IForgeRegistryEntry' 'setRegistryName('
-pin_uni 'net.minecraftforge.event.world.BlockEvent' 'BlockPos pos'
-pin_uni 'net.minecraftforge.event.world.BlockEvent' 'IBlockState state'
-pin_uni 'net.minecraftforge.event.world.BlockEvent' 'World world'
+pin_uni 'net.minecraftforge.event.world.BlockEvent' 'getWorld('
+pin_uni 'net.minecraftforge.event.world.BlockEvent' 'getPos('
+pin_uni 'net.minecraftforge.event.world.BlockEvent' 'getState('
 pin_uni 'net.minecraftforge.event.world.BlockEvent$HarvestDropsEvent' 'HarvestDropsEvent('
 pin_uni 'net.minecraftforge.event.entity.living.LivingEvent' 'getEntityLiving('
 pin_uni 'net.minecraftforge.event.entity.living.LivingDropsEvent' 'LivingDropsEvent('
@@ -346,7 +346,7 @@ echo "ok c3-live : forge stubs pinned to universal"
 BLD="$C3_DIR/build"
 rm -rf "$BLD" \
   || { echo "FAIL c3-live : cannot clear <$BLD> (root-owned docker leftovers? point C3_DIR at a user-owned dir)"; exit 1; }
-mkdir -p "$BLD/spi" "$BLD/ex1" "$BLD/mini" "$BLD/forge" "$BLD/jars"
+mkdir -p "$BLD/spi" "$BLD/ex1" "$BLD/mini" "$BLD/bridge" "$BLD/forge" "$BLD/jars"
 "$J8/javac" -source 8 -target 8 -nowarn -d "$BLD/spi" $(find ../spi/java/src -name '*.java')
 "$J8/javac" -source 8 -target 8 -nowarn -cp "$BLD/spi" -d "$BLD/ex1" $(find ../example1/java/src -name '*.java')
 "$J8/javac" -source 8 -target 8 -nowarn -cp "$BLD/spi" -d "$BLD/mini" $(find ../minimap/java/src -name '*.java')

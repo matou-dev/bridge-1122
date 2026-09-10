@@ -1,16 +1,42 @@
 # C3 autoplay companion WANT: vanilla members the dev-only companion
-# references, one per line (M = method, owner SRG + MCP name + SRG name +
-# descriptor + static 0|1). hub tools/run-client.sh (AUTOPLAY=1) derives
-# the narrow map from the pinned client jar + joined.tsrg and pin-checks
-# every line (same practice as the live WANT in tools/run-live.sh). No
-# snapshot lock on 1122 (Forge Maven ships no 1.12.2 snapshot CSVs; the
-# C3 server derive carries none either): the triple lock is pinned
-# joined.tsrg (mcp_config-1.12.2.zip, sha1-pinned by run-live.sh) +
-# javap exact-descriptor + static-ness against the pinned client jar +
-# MCP names cross-checked against mcp_stable-39 methods.csv
-# (func_71371_a=launchIntegratedServer, func_71400_g=shutdown,
-# func_71410_x=getMinecraft). A wrong MCP name dies loudly at runtime
-# (NoSuchMethodError), never silently.
+# references, one per line (M = method, F = field; owner SRG + MCP name +
+# SRG name + descriptor + static 0|1). hub tools/run-client.sh (AUTOPLAY=1)
+# derives the narrow map from the pinned client jar + joined.tsrg and
+# pin-checks every line (same practice as the live WANT in
+# tools/run-live.sh). No snapshot lock on 1122 (Forge Maven ships no
+# 1.12.2 snapshot CSVs; the C3 server derive carries none either): the
+# triple lock is pinned joined.tsrg (mcp_config-1.12.2.zip, sha1-pinned
+# by run-live.sh) + javap exact-descriptor + static-ness against the
+# pinned client jar + MCP names cross-checked against mcp_stable-39
+# methods.csv/fields.csv (join triple + every loot row below, e.g.
+# func_175623_d=isAirBlock, func_175698_g=setBlockToAir,
+# func_92059_d=getItem, field_73010_i=playerEntities,
+# field_72996_f=loadedEntityList). A wrong MCP name dies loudly at
+# runtime (NoSuchMethodError), never silently.
 M net/minecraft/client/Minecraft getMinecraft func_71410_x ()Lnet/minecraft/client/Minecraft; 1
 M net/minecraft/client/Minecraft launchIntegratedServer func_71371_a (Ljava/lang/String;Ljava/lang/String;Lnet/minecraft/world/WorldSettings;)V 0
 M net/minecraft/client/Minecraft shutdown func_71400_g ()V 0
+# Loot proof (LOOT=1): server-side simulated harvests — an ore harvest
+# (place + clear + HarvestDropsEvent post, spike honesty standard) plus
+# a pig kill (spawned pig + LivingDropsEvent post), then diamond-carrier
+# polls. Same searge-derive practice as above; static-ness documentary
+# on methods (exact SRG + descriptor + javap is the pin).
+M net/minecraft/block/Block getBlockFromName func_149684_b (Ljava/lang/String;)Lnet/minecraft/block/Block; 1
+M net/minecraft/block/Block getDefaultState func_176223_P ()Lnet/minecraft/block/state/IBlockState; 0
+M net/minecraft/world/World setBlockState func_175656_a (Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z 0
+M net/minecraft/world/World isAirBlock func_175623_d (Lnet/minecraft/util/math/BlockPos;)Z 0
+M net/minecraft/world/World setBlockToAir func_175698_g (Lnet/minecraft/util/math/BlockPos;)Z 0
+M net/minecraft/world/World spawnEntity func_72838_d (Lnet/minecraft/entity/Entity;)Z 0
+M net/minecraft/entity/Entity setPositionAndRotation func_70080_a (DDDFF)V 0
+M net/minecraft/entity/Entity setDead func_70106_y ()V 0
+M net/minecraft/entity/item/EntityItem getItem func_92059_d ()Lnet/minecraft/item/ItemStack; 0
+M net/minecraft/item/ItemStack getItem func_77973_b ()Lnet/minecraft/item/Item; 0
+F net/minecraft/world/World playerEntities field_73010_i Ljava/util/List; 0
+F net/minecraft/world/World loadedEntityList field_72996_f Ljava/util/List; 0
+F net/minecraft/world/World isRemote field_72995_K Z 0
+F net/minecraft/world/World provider field_73011_w Lnet/minecraft/world/WorldProvider; 0
+F net/minecraft/entity/Entity world field_70170_p Lnet/minecraft/world/World; 0
+F net/minecraft/entity/Entity posX field_70165_t D 0
+F net/minecraft/entity/Entity posY field_70163_u D 0
+F net/minecraft/entity/Entity posZ field_70161_v D 0
+F net/minecraft/init/Items diamond field_151045_i Lnet/minecraft/item/Item; 1

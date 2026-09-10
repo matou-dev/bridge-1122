@@ -8,3 +8,13 @@ net.minecraftforge.fml.common.gameevent.TickEvent$Phase END
 net.minecraftforge.common.MinecraftForge EVENT_BUS
 net.minecraftforge.fml.common.Mod modid()
 net.minecraftforge.fml.common.eventhandler.EventBus register(
+# Loot proof (LOOT=1): server-world ticks (side + dim scope), event posts,
+# and the two simulated event ctors — all measured against the pinned
+# 2860 universal, same practice as above.
+net.minecraftforge.fml.common.gameevent.TickEvent$WorldTickEvent world
+net.minecraftforge.fml.common.gameevent.TickEvent side
+net.minecraftforge.fml.common.gameevent.TickEvent phase
+net.minecraftforge.fml.relauncher.Side SERVER
+net.minecraftforge.fml.common.eventhandler.EventBus post(
+net.minecraftforge.event.world.BlockEvent$HarvestDropsEvent HarvestDropsEvent(
+net.minecraftforge.event.entity.living.LivingDropsEvent LivingDropsEvent(

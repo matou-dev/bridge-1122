@@ -235,19 +235,22 @@ public final class MatouBridgeMod {
         if (lootTable == null) {
             return;
         }
-        if (event.world.isRemote) {
+        // 2860 shape (measured via javap, never the 1.7.10 public fields):
+        // world/pos/state hide behind getters — field reads would die
+        // linking at runtime.
+        if (event.getWorld().isRemote) {
             return;
         }
-        if (event.world.provider.getDimension() != 0) {
+        if (event.getWorld().provider.getDimension() != 0) {
             return;
         }
-        if (!ores.contains(event.state.getBlock())) {
+        if (!ores.contains(event.getState().getBlock())) {
             return;
         }
         // Owner discipline (hub decisions/LOOT.md): coords go through the
         // declaring Vec3i type, never through the BlockPos subclass — the
         // hierarchy walk only maps the exact bytecode owner.
-        Vec3i p = event.pos;
+        Vec3i p = event.getPos();
         String harvest = Cell.of(p.getX(), p.getY(), p.getZ(),
                 LootJob.ORE).render();
         drops.record(harvest, tick);
