@@ -34,7 +34,6 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.SharedMonsterAttributes;
 import net.minecraft.entity.item.EntityItem;
-import net.minecraft.entity.passive.EntityPig;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.Vec3i;
@@ -77,14 +76,15 @@ import net.minecraftforge.fml.relauncher.Side;
  * ({@code E_LOOT_*}, never in the {@code E_FORGE_*} parity catalog), so
  * bridge parity holds with behaviour intentionally 1122-only until proven.
  *
- * <p>Spawn (event-sourced, hub decisions/SPAWN.md, T1 vanilla host): the
+ * <p>Spawn (event-sourced, hub decisions/SPAWN.md, custom entity): the
  * pure {@link SpawnJob} reads the bridge-owned {@link SpawnStore} census
  * plus the wired {@link SpawnTable} beside the first wire's pack states
  * (the pack-served spawn vocabulary, T3 registry — hub
  * {@code decisions/SPI_STATE_VOCABULARY.md}) and decides budgeted spawns;
- * due spawns land as vanilla pigs carrying our loot table (zero
- * registration risk — the custom-entity tranche narrows the species
- * later, hub decisions/SPAWN.md). A live {@code slots != due} divergence
+ * due spawns land as the registered custom beast ({@link MatouEntity},
+ * pig shape and renderer reused) carrying our loot table. Vanilla pigs
+ * are a different species now: ignored by the census, never vetoed. A
+ * live {@code slots != due} divergence
  * fails the tick loudly ({@code E_SPAWN_SEAL:diverged},
  * spike-tripwire shape). Census releases ride the kill hook below; an
  * {@code EntityJoinWorldEvent} veto holds the cap against pig joins the
@@ -370,17 +370,16 @@ public final class MatouBridgeMod {
 
     /**
      * Loot record: a server-side dim-0 mob kill becomes a beast harvest
-     * at the entity's block coords. T1 any-kill-pays scope (hub
+     * at the entity's block coords. T1 single-entry scope (hub
      * decisions/LOOT.md): every kill pays the one entry — per-mob
-     * filtering is a re-opener, never a quiet filter here. (The beast
-     * species narrows when custom-entity registration lands; until then
-     * the companion kills a vanilla pig.)
+     * filtering is a re-opener, never a quiet filter here. (The census
+     * species narrowed with custom-entity registration; the companion
+     * kills the registered beast.)
      *
      * <p>A dead beast also leaves the spawn census (hub
      * decisions/SPAWN.md): landings are recorded under their entity id,
      * the kill hook releases them. Unknown ids are not ours (a vanilla
-     * beast, or the loot proof's own pig, dies without ever being
-     * recorded): false, never a refusal.
+     * beast dies without ever being recorded): false, never a refusal.
      *
      * <p>Owner discipline (measured live on 1710: NoSuchFieldError
      * worldObj): inherited vanilla members are read through the declaring
@@ -391,7 +390,7 @@ public final class MatouBridgeMod {
     @SubscribeEvent
     public void onKill(LivingDropsEvent event) {
         Entity body = event.getEntityLiving();
-        if (spawnMob != null && body instanceof EntityPig) {
+        if (spawnMob != null && body instanceof MatouEntity) {
             // Owner discipline (measured live on 1710: reobf only walks
             // in-jar superclass chains, stub supertypes never ship) —
             // the id is read through the declaring stub type (Entity).
@@ -416,14 +415,15 @@ public final class MatouBridgeMod {
     }
 
     /**
-     * Spawn census: every server-side dim-0 pig join is recorded under
+     * Spawn census: every server-side dim-0 beast join is recorded under
      * its entity id — own landings (which also fire this event, recorded
-     * again here idempotently) and foreign pig joins alike. Recording
+     * again here idempotently) and foreign beast joins alike. Recording
      * every join the veto lets through is what keeps the census equal to
      * the living reality: a join past the cap is refused instead (the
      * budget never decided it), anything else joins the census the pure
-     * budget counts. T1 vanilla scope (hub decisions/SPAWN.md): the
-     * census is pigs until custom-entity registration narrows it.
+     * budget counts. Custom-entity scope (hub decisions/SPAWN.md): the
+     * census is the registered beast — vanilla pigs are a different
+     * species now (ignored, never vetoed, never counted).
      * Passive without a wired mob, and passive unless {@code SPAWN=1}
      * (the union and loot runs never see a beast, recorded or
      * otherwise).
@@ -444,7 +444,7 @@ public final class MatouBridgeMod {
         if (event.getWorld().provider.getDimension() != 0) {
             return;
         }
-        if (!(event.getEntity() instanceof EntityPig)) {
+        if (!(event.getEntity() instanceof MatouEntity)) {
             return;
         }
         // Owner discipline (hub decisions/LOOT.md): the id goes through
@@ -507,26 +507,25 @@ public final class MatouBridgeMod {
     }
 
     /**
-     * Spawn reconcile: adopt every living dim-0 pig the census does not
+     * Spawn reconcile: adopt every living dim-0 beast the census does not
      * know, sweep every census id no longer living. The join event stays
      * (prompt record plus the past-cap veto), but it misses silent paths
      * — measured live on 1710: a natural grass spawn never fired it, a
      * landing-only census undercounted reality and the fifth living beast
      * breached the cap loudly in the proof. The poll is the census of
      * record; events are the fast path. Adopted cells carry the spawn mob
-     * ref at the current pos (T1: every dim-0 pig carries our loot through
-     * the single-table kill hook). Tranche-1 scope: pigs outside the
+     * ref at the current pos. Tranche-1 scope: beasts outside the
      * loaded set sweep — the proof world keeps them loaded; a rejoin
      * re-adopts next tick.
      *
      * <p>Owner discipline (hub decisions/LOOT.md): inherited vanilla
      * members go through the declaring stub type ({@code Entity}), never
-     * through the pig.
+     * through the beast.
      */
     private void reconcile(World world, long now) {
         Map<String, String> living = new LinkedHashMap<String, String>();
         for (Entity body : world.loadedEntityList) {
-            if (!(body instanceof EntityPig)) {
+            if (!(body instanceof MatouEntity)) {
                 continue;
             }
             if (body.isDead) {
@@ -555,9 +554,9 @@ public final class MatouBridgeMod {
     }
 
     /**
-     * Spawn landing: one vanilla pig per due slot at the decided pad,
+     * Spawn landing: one registered beast per due slot at the decided pad,
      * recorded into the census under its entity id. The content hp lands
-     * on the pig's max-health attribute before the spawn (hp tranche, hub
+     * on the beast's max-health attribute before the spawn (hp tranche, hub
      * decisions/SPAWN.md) and the read-back is tripwired: a beast that
      * does not carry the spec hp fails the tick instead of roaming
      * underpowered silently. A refused spawn fails loudly — an unrecorded
@@ -566,13 +565,13 @@ public final class MatouBridgeMod {
      * <p>Owner discipline (hub decisions/LOOT.md): inherited vanilla
      * members go through the declaring stub type ({@code Entity},
      * {@code EntityLivingBase}, {@code SharedMonsterAttributes}), never
-     * through the pig.
+     * through the beast.
      */
     private void landBeast(World world, int x, int y, int z, String cell,
             long now) {
-        EntityPig pig = new EntityPig(world);
-        Entity body = pig;
-        EntityLivingBase living = pig;
+        MatouEntity beast = new MatouEntity(world);
+        Entity body = beast;
+        EntityLivingBase living = beast;
         living.getEntityAttribute(SharedMonsterAttributes.maxHealth)
                 .setBaseValue((double) spawnHp);
         living.setHealth((float) spawnHp);
@@ -582,7 +581,7 @@ public final class MatouBridgeMod {
                     + "> at tick " + now);
         }
         body.setPositionAndRotation(x + 0.5, y, z + 0.5, 0.0f, 0.0f);
-        if (!world.spawnEntity(pig)) {
+        if (!world.spawnEntity(beast)) {
             throw new IllegalStateException("E_SPAWN_SPAWN:refused <" + x
                     + "," + y + "," + z + ">");
         }

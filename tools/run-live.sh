@@ -134,7 +134,9 @@ echo "ok c3-live : server provisioned (pins verified)"
 #    forge/ bytecode references (verified by constant-pool scan at C3 time:
 #    getBlockFromName, getDefaultState, setBlockState, provider, plus the
 #    registration tranche: setHardness, getIdFromBlock, isOpaqueCube,
-#    Material/ROCK, plus the loot tranche: spawnEntity, EntityItem/ItemStack
+#    Material/ROCK, plus the custom entity tranche (Forge-side, pinned in
+#    step 2c, never in the narrow map: EntityRegistry, RenderingRegistry,
+#    IRenderFactory, FMLCommonHandler/getSide), plus the loot tranche: spawnEntity, EntityItem/ItemStack
 #    getItem, Items/diamond, Entity/world/posX/posY/posZ, World/isRemote,
 #    IBlockState/getBlock, Vec3i/getX/getY/getZ, plus the spawn tranche:
 #    Entity/getEntityId/isDead/setPositionAndRotation,
@@ -376,6 +378,18 @@ pin_uni 'net.minecraftforge.event.entity.EntityJoinWorldEvent' 'EntityJoinWorldE
 pin_uni 'net.minecraftforge.event.entity.EntityJoinWorldEvent' 'getWorld('
 pin_uni 'net.minecraftforge.event.entity.EntityEvent' 'getEntity('
 pin_uni 'net.minecraftforge.fml.common.eventhandler.Event' 'setCanceled('
+# Custom entity tranche (hub decisions/SPAWN.md): the generic beast
+# registers through EntityRegistry (registry name first on 1.12, never
+# the 1.7.10 call shape), the init-time tripwire reads it back, the
+# client-only renderer rides the IRenderFactory path (the single
+# (RenderManager) pig ctor, measured from the pinned client jar), and
+# the side guard keeps the mapping off dedicated servers. Forge names
+# are runtime-final: presence is the pin.
+pin_uni 'net.minecraftforge.fml.common.registry.EntityRegistry' 'registerModEntity('
+pin_uni 'net.minecraftforge.fml.common.registry.EntityRegistry' 'lookupModSpawn('
+pin_uni 'net.minecraftforge.fml.client.registry.RenderingRegistry' 'registerEntityRenderingHandler('
+pin_uni 'net.minecraftforge.fml.client.registry.IRenderFactory' 'createRenderFor('
+pin_uni 'net.minecraftforge.fml.common.FMLCommonHandler' 'getSide('
 echo "ok c3-live : forge stubs pinned to universal"
 
 # 3. Build all mod jars with Java 8. forge/ compiles against the pinned
@@ -402,7 +416,7 @@ cp -r "$BLD/bridge/"* "$BLD/forge/"
 EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
 printf 'Manifest-Version: 1.0\nImplementation-Version: %s\n' "$VERSION" > "$BLD/MANIFEST.MF"
 cat > "$BLD/mcmod.info" <<EOF
-[{"modid": "matoubridge", "name": "MatouBridge", "description": "SPI bridge for Minecraft 1.12.2 (reobfuscated SRG).", "version": "$VERSION", "mcversion": "1.12.2", "authorList": ["matou-dev"], "url": "https://github.com/matou-dev/bridge-1122"}, {"modid": "example1", "name": "MatouExample1", "description": "Example1 content: registers example1 blocks (registry event) for the bridge wire.", "version": "$VERSION", "mcversion": "1.12.2", "authorList": ["matou-dev"], "url": "https://github.com/matou-dev/example1"}]
+[{"modid": "matoubridge", "name": "MatouBridge", "description": "SPI bridge for Minecraft 1.12.2 (reobfuscated SRG).", "version": "$VERSION", "mcversion": "1.12.2", "authorList": ["matou-dev"], "url": "https://github.com/matou-dev/bridge-1122"}, {"modid": "example1", "name": "MatouExample1", "description": "Example1 content: registers example1 blocks (registry event) + the generic beast for the bridge wire.", "version": "$VERSION", "mcversion": "1.12.2", "authorList": ["matou-dev"], "url": "https://github.com/matou-dev/example1"}]
 EOF
 find "$BLD/spi" "$BLD/ex1" "$BLD/mini" "$BLD/forge" "$BLD/MANIFEST.MF" "$BLD/mcmod.info" -exec touch -h -d "@$EPOCH" {} +
 # mkjar: sorted entries, pinned mtimes, VERSION manifest. File lists stay

@@ -7,6 +7,17 @@ Full notes per tag: https://github.com/matou-dev/bridge-1122/releases.
 
 ## [Unreleased]
 
+- Custom entity E0 (hub `decisions/SPAWN.md`): `MatouEntity` shell
+  replaced by the generic beast (`extends EntityPig`, pig shape/AI/sounds
+  reused), `Example1Mod` preInit `EntityRegistry.registerModEntity`
+  (registry name first on 1.12 — measured, never the 1.7.10 call) with an
+  init-time `lookupModSpawn` tripwire + client-only vanilla `RenderPig`
+  mapping through `IRenderFactory` (single `(RenderManager)` ctor,
+  measured from the pinned client jar); census/veto/reconcile/kill-hook/
+  landing and the companion legs narrowed to the beast; companion carries
+  `required-after:matoubridge` (lead-measured, unproven on 2860 until
+  live). Live proof TODO.
+
 ## [1.2.0] - 2026-09-09
 
 Versioned server drop: https://github.com/matou-dev/bridge-1122/releases/tag/v1.2.0
