@@ -2,7 +2,6 @@ package net.minecraft.block;
 
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
-import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.registries.IForgeRegistryEntry;
 
 /**
@@ -11,7 +10,7 @@ import net.minecraftforge.registries.IForgeRegistryEntry;
  * stable_39; tools/run-live.sh (C3) derives the MCP-&gt;SRG map from the
  * pinned bytes and refuses loud on drift.
  */
-public class Block implements IForgeRegistryEntry<Block> {
+public class Block extends IForgeRegistryEntry.Impl<Block> {
     public Block(Material material) {
     }
 
@@ -27,11 +26,11 @@ public class Block implements IForgeRegistryEntry<Block> {
         return null;
     }
 
-    public Block setHardness(float hardness) {
-        return this;
+    public boolean isOpaqueCube(IBlockState state) {
+        return true;
     }
 
-    public Block setRegistryName(ResourceLocation name) {
+    public Block setHardness(float hardness) {
         return this;
     }
 }

@@ -100,10 +100,13 @@ public final class Example1Mod {
         public static void registerBlocks(
                 RegistryEvent.Register<Block> event) {
             for (PendingBlock p : PENDING) {
-                Block ore = new MatouBlock(p.hardness);
+                Block ore = new MatouBlock(p.hardness, p.opaque);
+                // Statement, return ignored: the call links through the
+                // erased interface descriptor (see stub Block), the
+                // Block-typed reference below is what registers.
+                ore.setRegistryName(new ResourceLocation(p.name));
                 try {
-                    event.getRegistry().register(ore.setRegistryName(
-                            new ResourceLocation(p.name)));
+                    event.getRegistry().register(ore);
                 } catch (Exception e) {
                     throw new IllegalArgumentException("E_REG_BLOCK:refused <"
                             + p.name + "> (" + e.getMessage() + ")", e);
@@ -135,6 +138,7 @@ public final class Example1Mod {
                     + "the content declaring it)");
         }
         float hardness = 0.0f;
+        boolean opaque = true;
         boolean found = false;
         for (Object o : loadSpecs(ownedFile)) {
             if (!shortName.equals(specField(o, "name", ownedFile))) {
@@ -150,11 +154,8 @@ public final class Example1Mod {
                 throw new IllegalArgumentException("E_REG_SPEC:shape <"
                         + ownedFile + "> (bad physics types)");
             }
-            if (!((Boolean) op).booleanValue()) {
-                throw new IllegalArgumentException("E_REG_SPEC:translucent <"
-                        + shortName + "> (no opacity slot on 1.12.2)");
-            }
             hardness = ((Float) h).floatValue();
+            opaque = ((Boolean) op).booleanValue();
             found = true;
         }
         if (!found) {
@@ -162,7 +163,7 @@ public final class Example1Mod {
                     + shortName + "> in <" + ownedFile + "> for <" + want
                     + ">");
         }
-        PENDING.add(new PendingBlock(want, hardness));
+        PENDING.add(new PendingBlock(want, hardness, opaque));
     }
 
     private static boolean pendingContains(String want) {
@@ -177,10 +178,12 @@ public final class Example1Mod {
     private static final class PendingBlock {
         final String name;
         final float hardness;
+        final boolean opaque;
 
-        PendingBlock(String name, float hardness) {
+        PendingBlock(String name, float hardness, boolean opaque) {
             this.name = name;
             this.hardness = hardness;
+            this.opaque = opaque;
         }
     }
 
