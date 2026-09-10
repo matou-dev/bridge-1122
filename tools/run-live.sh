@@ -136,7 +136,11 @@ echo "ok c3-live : server provisioned (pins verified)"
 #    registration tranche: setHardness, getIdFromBlock, isOpaqueCube,
 #    Material/ROCK, plus the loot tranche: spawnEntity, EntityItem/ItemStack
 #    getItem, Items/diamond, Entity/world/posX/posY/posZ, World/isRemote,
-#    IBlockState/getBlock, Vec3i/getX/getY/getZ).
+#    IBlockState/getBlock, Vec3i/getX/getY/getZ, plus the spawn tranche:
+#    Entity/getEntityId/isDead/setPositionAndRotation,
+#    World/loadedEntityList, EntityLivingBase/getEntityAttribute/
+#    getMaxHealth/setHealth, IAttributeInstance/setBaseValue,
+#    SharedMonsterAttributes/maxHealth).
 #    WorldProvider.getDimension is NOT mapped on purpose: it is Forge-added
 #    (11 readable call sites in the pinned universal, e.g. DimensionManager),
 #    hence runtime-final — Reobf passes it through by design, and the live
@@ -174,6 +178,23 @@ WANT = [
     ("net/minecraft/util/math/Vec3i", "getX", "()I", "method", False, "func_177958_n"),
     ("net/minecraft/util/math/Vec3i", "getY", "()I", "method", False, "func_177956_o"),
     ("net/minecraft/util/math/Vec3i", "getZ", "()I", "method", False, "func_177952_p"),
+    # Spawn tranche (hub decisions/SPAWN.md, T1 vanilla host + hp seam):
+    # the census id, the living poll, the landing pose, the reconciled
+    # list, the max-health attribute round-trip. SRG anchors are
+    # load-bearing throughout: ()I, ()F and (F)V each name several Entity
+    # / EntityLivingBase members (measured: getEntityId shares ()I with
+    # five others, getMaxHealth shares ()F with seven — the 1710 SRG name
+    # does NOT carry over either: getEntityId is func_82145_z on 2860,
+    # never func_70077_b), so the anchor picks the intended one.
+    ("net/minecraft/entity/Entity", "getEntityId", "()I", "method", False, "func_82145_z"),
+    ("net/minecraft/entity/Entity", "isDead", "Z", "field", False, "field_70128_L"),
+    ("net/minecraft/world/World", "loadedEntityList", "Ljava/util/List;", "field", False, "field_72996_f"),
+    ("net/minecraft/entity/Entity", "setPositionAndRotation", "(DDDFF)V", "method", False, "func_70080_a"),
+    ("net/minecraft/entity/EntityLivingBase", "getEntityAttribute", "(Lnet/minecraft/entity/ai/attributes/IAttribute;)Lnet/minecraft/entity/ai/attributes/IAttributeInstance;", "method", False, "func_110148_a"),
+    ("net/minecraft/entity/EntityLivingBase", "getMaxHealth", "()F", "method", False, "func_110138_aP"),
+    ("net/minecraft/entity/EntityLivingBase", "setHealth", "(F)V", "method", False, "func_70606_j"),
+    ("net/minecraft/entity/ai/attributes/IAttributeInstance", "setBaseValue", "(D)V", "method", False, "func_111128_a"),
+    ("net/minecraft/entity/SharedMonsterAttributes", "maxHealth", "Lnet/minecraft/entity/ai/attributes/IAttribute;", "field", True, "field_111267_a"),
 ]
 srg2obf, classes = {}, {}
 cur = None
@@ -195,14 +216,19 @@ def obf_desc(d):
 # javap spells primitive field types by name (double, boolean, ...), never
 # by descriptor char — the loot tranche pins Entity/posX (D) and
 # World/isRemote (Z), so the field-type key maps single-char descriptors
-# (object types keep the obf_desc path above).
+# (object types keep the obf_desc path above). Unobfuscated packages keep
+# their dots in javap (java.util.List) while SRG descriptors use slashes,
+# so object types normalize to dots — same replace as hub
+# tools/run-client.sh (the notch jar spells the obf class with no
+# separator at all, so one replace covers both; obf names never contain a
+# slash-or-dot). The spawn tranche needs it for World/loadedEntityList.
 PRIM = {"Z": "boolean", "B": "byte", "C": "char", "D": "double",
         "F": "float", "I": "int", "J": "long", "S": "short"}
 
 def obf_ftype(d):
     if d in PRIM:
         return PRIM[d]
-    return obf_desc(d)[1:-1]
+    return obf_desc(d)[1:-1].replace("/", ".")
 
 def javap_flags(cls):
     # -> {(name, descriptor-or-F:type): is_static} from the notch server jar.
@@ -259,7 +285,7 @@ for row in WANT:
         hits = [m for m in members if len(m) == 2 and m[0] == flds[0]]
         assert len(hits) == 1, "E_SRG_DERIVE:no tsrg field <%s %s>" % (owner, mcp)
         lines.append("FD: %s/%s %s/%s" % (owner, hits[0][1], owner, mcp))
-assert len(lines) == 21, "E_SRG_DERIVE:want 21 lines, got %d" % len(lines)
+assert len(lines) == 30, "E_SRG_DERIVE:want 30 lines, got %d" % len(lines)
 open(outpath, "w").write("\n".join(lines) + "\n")
 print("ok c3-live : narrow SRG derived (%d lines)" % len(lines))
 EOF
@@ -295,10 +321,19 @@ pin_method "net/minecraft/block/state/IBlockState/getBlock" "()Lnet/minecraft/bl
 pin_method "net/minecraft/util/math/Vec3i/getX" "()I"
 pin_method "net/minecraft/util/math/Vec3i/getY" "()I"
 pin_method "net/minecraft/util/math/Vec3i/getZ" "()I"
+pin_method "net/minecraft/entity/Entity/getEntityId" "()I"
+pin_field "net/minecraft/entity/Entity/isDead"
+pin_field "net/minecraft/world/World/loadedEntityList"
+pin_method "net/minecraft/entity/Entity/setPositionAndRotation" "(DDDFF)V"
+pin_method "net/minecraft/entity/EntityLivingBase/getEntityAttribute" "(Lnet/minecraft/entity/ai/attributes/IAttribute;)Lnet/minecraft/entity/ai/attributes/IAttributeInstance;"
+pin_method "net/minecraft/entity/EntityLivingBase/getMaxHealth" "()F"
+pin_method "net/minecraft/entity/EntityLivingBase/setHealth" "(F)V"
+pin_method "net/minecraft/entity/ai/attributes/IAttributeInstance/setBaseValue" "(D)V"
+pin_field "net/minecraft/entity/SharedMonsterAttributes/maxHealth"
 grep -q "getDimension" "$SRG_NARROW" \
   && { echo "FAIL c3-live : getDimension must stay unmapped (Forge-added, runtime-final)"; exit 1; }
-[ "$(grep -c . "$SRG_NARROW")" = "21" ] \
-  || { echo "FAIL c3-live : narrow map drift (want 21 lines)"; exit 1; }
+[ "$(grep -c . "$SRG_NARROW")" = "30" ] \
+  || { echo "FAIL c3-live : narrow map drift (want 30 lines)"; exit 1; }
 echo "ok c3-live : stubs pinned to derived SRG"
 
 # 2c. Pin every stubbed Forge member against the provisioned 2860 universal.
@@ -332,6 +367,10 @@ pin_uni 'net.minecraftforge.event.world.BlockEvent' 'getState('
 pin_uni 'net.minecraftforge.event.world.BlockEvent$HarvestDropsEvent' 'HarvestDropsEvent('
 pin_uni 'net.minecraftforge.event.entity.living.LivingEvent' 'getEntityLiving('
 pin_uni 'net.minecraftforge.event.entity.living.LivingDropsEvent' 'LivingDropsEvent('
+pin_uni 'net.minecraftforge.event.entity.EntityJoinWorldEvent' 'EntityJoinWorldEvent('
+pin_uni 'net.minecraftforge.event.entity.EntityJoinWorldEvent' 'getWorld('
+pin_uni 'net.minecraftforge.event.entity.EntityEvent' 'getEntity('
+pin_uni 'net.minecraftforge.fml.common.eventhandler.Event' 'setCanceled('
 echo "ok c3-live : forge stubs pinned to universal"
 
 # 3. Build all mod jars with Java 8. forge/ compiles against the pinned
@@ -340,9 +379,10 @@ echo "ok c3-live : forge stubs pinned to universal"
 #    commit + same toolchain == same bytes, see normjar), manifests carry
 #    VERSION, the bridge jar embeds mcmod.info.
 #    These are the exact bytes the live run proves AND the release ships.
-#    Bridge-owned pure (java/src: loot store/seal, operator policy) compiles
-#    beside the seam and stages into the forge classes (same shape as 1710:
-#    java/ ships inside the bridge jar, never standalone).
+#    Bridge-owned pure (java/src: loot store/seal, spawn store/seal,
+#    operator policy) compiles beside the seam and stages into the forge
+#    classes (same shape as 1710: java/ ships inside the bridge jar, never
+#    standalone).
 BLD="$C3_DIR/build"
 rm -rf "$BLD" \
   || { echo "FAIL c3-live : cannot clear <$BLD> (root-owned docker leftovers? point C3_DIR at a user-owned dir)"; exit 1; }
@@ -486,9 +526,9 @@ echo "ok c3-live : server ran ($BOOT_SECS s)"
 #    the rolling server log — FML splits output across both).
 LOGS="$SERV/boot-c3.log"
 [ -f "$SERV/logs/latest.log" ] && LOGS="$LOGS $SERV/logs/latest.log"
-if grep -a -q "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|Encountered an unexpected exception" $LOGS; then
+if grep -a -q "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|Encountered an unexpected exception" $LOGS; then
   echo "FAIL c3-live : runtime refusal (see $SERV/boot-c3.log)"
-  grep -a -m5 "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|Caused by" $LOGS
+  grep -a -m5 "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|Caused by" $LOGS
   exit 1
 fi
 grep -a -q "matoubridge" $LOGS \

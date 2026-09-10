@@ -5,6 +5,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.passive.EntityPig;
 import net.minecraft.entity.player.EntityPlayer;
@@ -65,6 +66,25 @@ import net.minecraftforge.fml.relauncher.Side;
  * in universal-pin.txt). A carrier observed late, or never, fails loudly
  * (loot FAILED) and shuts the game down for post-mortem. Without LOOT=1
  * nothing here runs and the proof is byte-for-byte the proven union run.
+ *
+ * <p>Spawn proof (SPAWN=1, DEV ONLY): the bridge itself lands budgeted
+ * pigs (SPAWN=1 also arms {@code MatouBridgeMod.spawnTick} — one flag
+ * drives both sides, so LOOT=1 runs stay spawn-free and their own pig
+ * never meets the cap veto). The companion never spawns here: it polls
+ * the loaded pigs the bridge landed up to cap, records the maximum seen
+ * (past cap fails loudly — the veto owns that bound), kills the first
+ * pig past SPAWN_KILL_TICK with a simulated {@code LivingDropsEvent}
+ * post (loot honesty standard — the kill pays through the loot table,
+ * proving the spawn-to-loot chain), then polls the diamond carrier at
+ * the kill spot. The first living pig's max health is polled once
+ * against SPAWN_HP (hp tranche — the bridge applies the content hp per
+ * landing; a diverged read-back fails loudly here too). T1 vanilla
+ * scope: the census IS pigs, so a combined LOOT=1 + SPAWN=1 run counts
+ * the loot victim briefly — the proofs run one flag at a time. A
+ * missing pig, a breached cap, or a missing carrier fails loudly
+ * (spawn FAILED) and shuts the game down for post-mortem. Without
+ * SPAWN=1 nothing here runs and the proof is byte-for-byte the proven
+ * union run.
  */
 @Mod(modid = AutoplayMod.MODID, name = "MatouAutoplay", version = "0.0-dev",
         acceptableRemoteVersions = "*")
@@ -83,6 +103,23 @@ public class AutoplayMod {
     static final int LOOT_HARVEST_TICK = 1000;
     static final int LOOT_BEAST_DELAY = 5;
     static final int LOOT_TIMEOUT = 600;
+    static final boolean SPAWN = "1".equals(System.getenv("SPAWN"));
+    /** Mirrors the effective cap (content {@code owned.matou mob my_beast
+     * cap} default, operator {@code spawn.cap} wins — transported by the
+     * bridge spawn wire): the companion counts pigs, the effective
+     * policy owns the bound — a drift here fails the proof loudly
+     * instead of asserting a stale cap silently. Override proofs set
+     * {@code SPAWN_CAP} to the packs.cfg override (both sides name the
+     * same bound, or the breach check is blind).
+     */
+    static final int SPAWN_CAP = spawnCapOfEnv();
+    /** Mirrors the content hp ({@code owned.matou mob my_beast hp} via
+     * {@code MatouBridgeMod} spawn wire): the companion polls the landed
+     * max health, the bridge owns the value — a drift here fails the
+     * proof loudly instead of asserting a stale hp silently. */
+    static final float SPAWN_HP = 20.0f;
+    static final int SPAWN_KILL_TICK = 1000;
+    static final int SPAWN_TIMEOUT = 600;
 
     volatile int serverTicks = 0;
     volatile int worldTicks = 0;
@@ -93,6 +130,18 @@ public class AutoplayMod {
     volatile boolean lootFailed = false;
     volatile int oreDropTick = -1;
     volatile int beastDropTick = -1;
+    volatile boolean pigSeen = false;
+    volatile boolean hpSeen = false;
+    volatile int maxPigs = 0;
+    volatile int firstPigTick = -1;
+    volatile boolean pigKilled = false;
+    volatile int killTick = -1;
+    volatile int killX = 0;
+    volatile int killY = 0;
+    volatile int killZ = 0;
+    volatile boolean carrierDropped = false;
+    volatile boolean spawnFailed = false;
+    volatile int carrierTick = -1;
     World world = null;
     boolean foreignNoted = false;
     boolean playerNoted = false;
@@ -101,6 +150,29 @@ public class AutoplayMod {
 
     public AutoplayMod() {
         MinecraftForge.EVENT_BUS.register(this);
+    }
+
+    /**
+     * Effective cap want: {@code SPAWN_CAP} env wins, default 4 is the
+     * content cap. Loud on garbage — a defaulted bound blinds the
+     * breach check silently otherwise. DEV-only.
+     */
+    private static int spawnCapOfEnv() {
+        String raw = System.getenv("SPAWN_CAP");
+        if (raw == null || raw.isEmpty()) {
+            return 4;
+        }
+        try {
+            int v = Integer.parseInt(raw);
+            if (v <= 0) {
+                throw new NumberFormatException("non-positive");
+            }
+            return v;
+        } catch (RuntimeException bad) {
+            throw new IllegalArgumentException(
+                    "E_AUTOPLAY_SPAWN_CAP:bad <" + raw
+                            + "> (want positive int, default 4)");
+        }
     }
 
     @SubscribeEvent
@@ -117,7 +189,7 @@ public class AutoplayMod {
                 || event.phase != TickEvent.Phase.END) {
             return;
         }
-        if (!LOOT) {
+        if (!LOOT && !SPAWN) {
             return;
         }
         if (event.world.provider.getDimension() != 0) {
@@ -131,16 +203,26 @@ public class AutoplayMod {
         }
         if (world == null) {
             world = event.world;
-            System.out.println("[MatouAutoplay] loot armed <ore "
-                    + LOOT_ORE_X + "," + LOOT_ORE_Y + ","
-                    + LOOT_ORE_Z + ":" + LOOT_ORE_BLOCK + " + pig "
-                    + LOOT_BEAST_X + "," + LOOT_BEAST_Y + ","
-                    + LOOT_BEAST_Z + "> harvestAt="
-                    + LOOT_HARVEST_TICK + " (LOOT=1)");
+            if (LOOT) {
+                System.out.println("[MatouAutoplay] loot armed <ore "
+                        + LOOT_ORE_X + "," + LOOT_ORE_Y + ","
+                        + LOOT_ORE_Z + ":" + LOOT_ORE_BLOCK + " + pig "
+                        + LOOT_BEAST_X + "," + LOOT_BEAST_Y + ","
+                        + LOOT_BEAST_Z + "> harvestAt="
+                        + LOOT_HARVEST_TICK + " (LOOT=1)");
+            }
+            if (SPAWN) {
+                System.out.println("[MatouAutoplay] spawn armed <cap="
+                        + SPAWN_CAP + "> killAt=" + SPAWN_KILL_TICK
+                        + " (SPAWN=1)");
+            }
         }
         worldTicks++;
-        if (!lootFailed) {
+        if (LOOT && !lootFailed) {
             lootTick();
+        }
+        if (SPAWN && !spawnFailed) {
+            spawnTick();
         }
     }
 
@@ -292,6 +374,133 @@ public class AutoplayMod {
         }
     }
 
+    private void spawnFail(String what) {
+        spawnFailed = true;
+        System.out.println("[MatouAutoplay] FAIL spawn-proof : " + what);
+    }
+
+    /**
+     * Spawn proof tick: count the bridge-landed pigs (cap bound owned by
+     * the bridge veto — past cap fails here), kill the first pig past
+     * the kill tick through the loot seam, poll the carrier at the kill
+     * spot. The companion never spawns: every pig here was decided by
+     * the pure SpawnJob and landed by the bridge sink. T1 vanilla scope:
+     * the census IS pigs (the species narrows with custom-entity
+     * registration).
+     */
+    private void spawnTick() {
+        if (world.loadedEntityList == null) {
+            return;
+        }
+        int pigs = 0;
+        EntityPig first = null;
+        for (Entity e : world.loadedEntityList) {
+            if (!(e instanceof EntityPig)) {
+                continue;
+            }
+            // Owner discipline (hub decisions/LOOT.md): inherited vanilla
+            // members go through the declaring stub type, never the pig.
+            // Dead pigs linger in the loaded list (measured on 1710: a
+            // corpse counted past cap at worldTick 51) — the census
+            // counts the living only, like the bridge release on the
+            // kill hook.
+            if (e.isDead) {
+                continue;
+            }
+            pigs++;
+            if (first == null) {
+                first = (EntityPig) e;
+            }
+        }
+        if (pigs > maxPigs) {
+            maxPigs = pigs;
+            System.out.println("[MatouAutoplay] spawn census <" + pigs
+                    + "> at worldTick " + worldTicks);
+        }
+        if (!pigSeen && pigs > 0) {
+            pigSeen = true;
+            firstPigTick = worldTicks;
+            System.out.println("[MatouAutoplay] spawn first pig at "
+                    + "worldTick " + firstPigTick);
+        }
+        if (!hpSeen && first != null) {
+            // Owner discipline (hub decisions/LOOT.md): inherited vanilla
+            // members go through the declaring stub type, never the pig.
+            EntityLivingBase living = first;
+            float hp = living.getMaxHealth();
+            if (hp != SPAWN_HP) {
+                spawnFail("hp diverged <want=" + SPAWN_HP + " got=" + hp
+                        + "> at worldTick " + worldTicks);
+                return;
+            }
+            hpSeen = true;
+            System.out.println("[MatouAutoplay] spawn hp <" + hp
+                    + "> at worldTick " + worldTicks);
+        }
+        if (pigs > SPAWN_CAP) {
+            spawnFail("cap breached <" + pigs + " > " + SPAWN_CAP
+                    + "> at worldTick " + worldTicks);
+            return;
+        }
+        if (!pigKilled && pigSeen && first != null
+                && worldTicks >= SPAWN_KILL_TICK) {
+            spawnKill(first);
+        }
+        if (pigKilled && !carrierDropped) {
+            spawnPoll();
+        }
+        if (!pigSeen && worldTicks > SPAWN_KILL_TICK + SPAWN_TIMEOUT) {
+            spawnFail("timeout (no bridge pig " + SPAWN_TIMEOUT
+                    + " ticks after kill tick " + SPAWN_KILL_TICK + ")");
+        } else if (pigKilled && !carrierDropped
+                && worldTicks > killTick + SPAWN_TIMEOUT) {
+            spawnFail("timeout (no carrier " + SPAWN_TIMEOUT
+                    + " ticks after kill at worldTick " + killTick + ")");
+        }
+    }
+
+    private void spawnKill(EntityPig pig) {
+        // Owner discipline (hub decisions/LOOT.md): inherited vanilla
+        // members go through the declaring stub type, never the pig.
+        Entity body = pig;
+        killX = (int) Math.floor(body.posX);
+        killY = (int) Math.floor(body.posY);
+        killZ = (int) Math.floor(body.posZ);
+        MinecraftForge.EVENT_BUS.post(new LivingDropsEvent(pig, null,
+                new ArrayList<EntityItem>(), 0, true));
+        body.setDead();
+        pigKilled = true;
+        killTick = worldTicks;
+        System.out.println("[MatouAutoplay] spawn pig killed <"
+                + killX + "," + killY + "," + killZ + ":pig> at "
+                + "worldTick " + killTick);
+    }
+
+    private void spawnPoll() {
+        if (world.loadedEntityList == null) {
+            return;
+        }
+        for (Entity e : world.loadedEntityList) {
+            if (!(e instanceof EntityItem)) {
+                continue;
+            }
+            EntityItem item = (EntityItem) e;
+            ItemStack stack = item.getItem();
+            if (stack == null || stack.getItem() != Items.diamond) {
+                continue;
+            }
+            if (near(e, killX, killY, killZ)) {
+                carrierDropped = true;
+                carrierTick = worldTicks;
+                System.out.println("[MatouAutoplay] spawn pig dropped "
+                        + "<diamond> at worldTick " + carrierTick
+                        + " (elapsed " + (carrierTick - killTick)
+                        + ", want immediate)");
+                return;
+            }
+        }
+    }
+
     private static boolean near(Entity e, int x, int y, int z) {
         return Math.abs(e.posX - (x + 0.5)) < 3.0
                 && Math.abs(e.posY - (y + 0.5)) < 3.0
@@ -315,8 +524,15 @@ public class AutoplayMod {
             mc.shutdown();
             return;
         }
+        if (SPAWN && spawnFailed && !done) {
+            done = true;
+            System.out.println("[MatouAutoplay] spawn FAILED, shutting down");
+            mc.shutdown();
+            return;
+        }
         if (serverTicks >= WAIT_SERVER_TICKS
                 && (!LOOT || (oreDropped && beastDropped))
+                && (!SPAWN || (pigSeen && carrierDropped))
                 && !done) {
             done = true;
             System.out.println("[MatouAutoplay] done after " + serverTicks + " server ticks, shutting down");
