@@ -16,5 +16,10 @@ net.minecraftforge.fml.common.gameevent.TickEvent side
 net.minecraftforge.fml.common.gameevent.TickEvent phase
 net.minecraftforge.fml.relauncher.Side SERVER
 net.minecraftforge.fml.common.eventhandler.EventBus post(
+# Spike proof (SPIKE=1): the simulated harvest posts the player-authored
+# BreakEvent the bridge hook records — ctor measured against the pinned
+# 2860 universal (World, BlockPos, IBlockState, EntityPlayer), same
+# practice as above.
+net.minecraftforge.event.world.BlockEvent$BreakEvent BreakEvent(
 net.minecraftforge.event.world.BlockEvent$HarvestDropsEvent HarvestDropsEvent(
 net.minecraftforge.event.entity.living.LivingDropsEvent LivingDropsEvent(

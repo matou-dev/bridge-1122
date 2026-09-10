@@ -41,12 +41,24 @@ public class BlockEvent extends Event {
     /**
      * Repop spike: the bridge hook only reads world/pos/state through the
      * base getters (the 1.7.10 public-field shape does not port). The real
-     * event ctor (player-authored post) grows here with the companion
-     * tranche, same discipline as the loot harvest event below.
+     * event ctor takes the joined player as 4th arg (measured via javap
+     * against the pinned 2860 universal: BreakEvent(World, BlockPos,
+     * IBlockState, EntityPlayer) — the 1.7.10 int-xyz shape does not
+     * port; the ctor reads the player, so the companion post is
+     * player-authored, never null). The harvest event below keeps the
+     * same player-authored discipline.
      */
     public static class BreakEvent extends BlockEvent {
-        protected BreakEvent(World world, BlockPos pos, IBlockState state) {
+        private final EntityPlayer player;
+
+        public BreakEvent(World world, BlockPos pos, IBlockState state,
+                EntityPlayer player) {
             super(world, pos, state);
+            this.player = player;
+        }
+
+        public EntityPlayer getPlayer() {
+            return player;
         }
     }
 

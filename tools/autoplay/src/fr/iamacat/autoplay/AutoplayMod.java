@@ -48,7 +48,29 @@ import net.minecraftforge.fml.relauncher.Side;
  * the counter crossing threads is volatile — explicitly, never by luck.
  * World name follows AUTOPLAY_WORLD (default matou), matching verify.
  *
- * <p>Loot proof (LOOT=1, DEV ONLY): at LOOT_HARVEST_TICK server-world
+  * <p>Spike proof (SPIKE=1, DEV ONLY): at SPIKE_MINE_TICK server-world
+  * ticks the companion places one stone at isolated coords outside the
+  * union slices (20,10,8 — the verdict reads y=63..65 only and the vein
+  * band is y=60..61, so the spike cell can never pollute world == pure
+  * union; the loot legs already mine (8,10,8) and kill at (12,10,8), so
+  * the spike takes another x at the same neutral y, inside the loaded
+  * chunks), clears it, and posts that harvest as a {@code BreakEvent}
+  * authored by the joined player — then polls the cell back to stone.
+  * The harvest is simulated, honestly: placing + clearing plus a bus post
+  * exercises the shipped hook ({@code onBreak} reads world, dim and block
+  * only through the 2860 getters) through the live seal
+  * ({@code RepopSeal}), the pure {@code RepopJob} and the live sink —
+  * that seam is what the spike owns. The post carries the real joined
+  * player (the BreakEvent constructor itself reads it — null NPEs,
+  * measured on the lead bridge; what is NOT re-proven is vanilla firing
+  * the event on a genuine player harvest (Forge-owned, shape-pinned in
+  * universal-pin.txt). A repop observed before the delay, or never, fails
+  * loudly (spike FAILED) and shuts the game down for post-mortem — the
+  * save keeps the air hole, the verifier and the y=10 anvil spot-check
+  * refuse it. Without SPIKE=1 nothing here runs and the proof is
+  * byte-for-byte the proven union run.
+  *
+  * <p>Loot proof (LOOT=1, DEV ONLY): at LOOT_HARVEST_TICK server-world
  * ticks the companion harvests the registered ore at an isolated coords
  * outside the union slices (8,10,8 — place + clear + an 8-arg
  * {@code HarvestDropsEvent} post authored by the joined player, spike
@@ -103,6 +125,13 @@ public class AutoplayMod {
     public static final String MODID = "matouautoplay";
     static final int WAIT_SERVER_TICKS = 4600;
     static final String WORLD = System.getenv().getOrDefault("AUTOPLAY_WORLD", "matou");
+    static final boolean SPIKE = "1".equals(System.getenv("SPIKE"));
+    static final int SPIKE_X = 20;
+    static final int SPIKE_Y = 10;
+    static final int SPIKE_Z = 8;
+    static final String SPIKE_BLOCK = "minecraft:stone";
+    static final int SPIKE_MINE_TICK = 1000;
+    static final int SPIKE_TIMEOUT = 600;
     static final boolean LOOT = "1".equals(System.getenv("LOOT"));
     static final int LOOT_ORE_X = 8;
     static final int LOOT_ORE_Y = 10;
@@ -134,6 +163,11 @@ public class AutoplayMod {
 
     volatile int serverTicks = 0;
     volatile int worldTicks = 0;
+    volatile boolean mined = false;
+    volatile boolean repopped = false;
+    volatile boolean spikeFailed = false;
+    volatile int mineTick = -1;
+    volatile int repopTick = -1;
     volatile int lootOreTick = -1;
     volatile int lootBeastTick = -1;
     volatile boolean oreDropped = false;
@@ -200,7 +234,7 @@ public class AutoplayMod {
                 || event.phase != TickEvent.Phase.END) {
             return;
         }
-        if (!LOOT && !SPAWN) {
+        if (!SPIKE && !LOOT && !SPAWN) {
             return;
         }
         if (event.world.provider.getDimension() != 0) {
@@ -214,6 +248,12 @@ public class AutoplayMod {
         }
         if (world == null) {
             world = event.world;
+            if (SPIKE) {
+                System.out.println("[MatouAutoplay] spike armed <"
+                        + SPIKE_X + "," + SPIKE_Y + ","
+                        + SPIKE_Z + ":" + SPIKE_BLOCK + "> mineAt="
+                        + SPIKE_MINE_TICK + " (SPIKE=1)");
+            }
             if (LOOT) {
                 System.out.println("[MatouAutoplay] loot armed <ore "
                         + LOOT_ORE_X + "," + LOOT_ORE_Y + ","
@@ -229,11 +269,99 @@ public class AutoplayMod {
             }
         }
         worldTicks++;
+        if (SPIKE) {
+            if (!mined && !spikeFailed && worldTicks >= SPIKE_MINE_TICK) {
+                mine();
+            } else if (mined && !repopped && !spikeFailed) {
+                poll();
+            }
+        }
         if (LOOT && !lootFailed) {
             lootTick();
         }
         if (SPAWN && !spawnFailed) {
             spawnTick();
+        }
+    }
+
+    private void fail(String what) {
+        spikeFailed = true;
+        System.out.println("[MatouAutoplay] FAIL spike-proof : " + what);
+    }
+
+    private void mine() {
+        // The BreakEvent constructor reads the player (measured NPE on
+        // null on the lead bridge), so the harvest is authored by the
+        // joined player, not forged from null. Absent player (not joined
+        // yet) postpones the mine, loudly once; a player that never shows
+        // fails the proof instead of mining authorless. Checked before
+        // touching the world: a postponed mine leaves no hole behind.
+        if (world.playerEntities == null || world.playerEntities.isEmpty()) {
+            if (!playerNoted) {
+                playerNoted = true;
+                System.out.println("[MatouAutoplay] note spike-proof : "
+                        + "player absent at mine tick, postponing");
+            }
+            if (worldTicks > SPIKE_MINE_TICK + SPIKE_TIMEOUT) {
+                fail("player never joined (no harvest author)");
+            }
+            return;
+        }
+        Block stone = Block.getBlockFromName(SPIKE_BLOCK);
+        if (stone == null) {
+            fail("unknown <" + SPIKE_BLOCK + "> (want vanilla stone)");
+            return;
+        }
+        IBlockState stoneState = stone.getDefaultState();
+        BlockPos at = new BlockPos(SPIKE_X, SPIKE_Y, SPIKE_Z);
+        if (!world.isAirBlock(at)) {
+            fail("spike cell occupied before place (want air, "
+                    + "proof needs isolated coords)");
+            return;
+        }
+        if (!world.setBlockState(at, stoneState)) {
+            fail("place refused (setBlockState false at worldTick "
+                    + worldTicks + ")");
+            return;
+        }
+        if (world.isAirBlock(at)) {
+            fail("place invisible (still air after setBlockState)");
+            return;
+        }
+        if (!world.setBlockToAir(at)) {
+            fail("clear refused (setBlockToAir false)");
+            return;
+        }
+        if (!world.isAirBlock(at)) {
+            fail("clear invisible (not air after setBlockToAir)");
+            return;
+        }
+        // The harvest is authored by the joined player (fetched above —
+        // the BreakEvent constructor reads it, null NPEs on the lead
+        // bridge). 2860 shape (measured via javap, never the 1.7.10 int
+        // xyz): (World, BlockPos, IBlockState, EntityPlayer).
+        EntityPlayer player = world.playerEntities.get(0);
+        MinecraftForge.EVENT_BUS.post(new BlockEvent.BreakEvent(world, at,
+                stoneState, player));
+        mined = true;
+        mineTick = worldTicks;
+        System.out.println("[MatouAutoplay] spike mined <" + SPIKE_X + ","
+                + SPIKE_Y + "," + SPIKE_Z + ":" + SPIKE_BLOCK
+                + "> at worldTick " + mineTick);
+    }
+
+    private void poll() {
+        BlockPos at = new BlockPos(SPIKE_X, SPIKE_Y, SPIKE_Z);
+        if (!world.isAirBlock(at)) {
+            repopped = true;
+            repopTick = worldTicks;
+            System.out.println("[MatouAutoplay] spike repopped <" + SPIKE_X
+                    + "," + SPIKE_Y + "," + SPIKE_Z + ":" + SPIKE_BLOCK
+                    + "> at worldTick " + repopTick + " (elapsed "
+                    + (repopTick - mineTick) + ", want >= 200)");
+        } else if (worldTicks > mineTick + SPIKE_TIMEOUT) {
+            fail("timeout (still air " + SPIKE_TIMEOUT
+                    + " ticks after mine at worldTick " + mineTick + ")");
         }
     }
 
@@ -532,6 +660,12 @@ public class AutoplayMod {
             mc.launchIntegratedServer(WORLD, WORLD, null);
             return;
         }
+        if (SPIKE && spikeFailed && !done) {
+            done = true;
+            System.out.println("[MatouAutoplay] spike FAILED, shutting down");
+            mc.shutdown();
+            return;
+        }
         if (LOOT && lootFailed && !done) {
             done = true;
             System.out.println("[MatouAutoplay] loot FAILED, shutting down");
@@ -545,6 +679,7 @@ public class AutoplayMod {
             return;
         }
         if (serverTicks >= WAIT_SERVER_TICKS
+                && (!SPIKE || repopped)
                 && (!LOOT || (oreDropped && beastDropped))
                 && (!SPAWN || (pigSeen && carrierDropped))
                 && !done) {
