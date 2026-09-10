@@ -400,9 +400,9 @@ if [ "${BUILD_ONLY:-}" = "1" ]; then
   cp "$BLD/jars/matou-example1.jar" "dist/matou-example1-$VERSION.jar"
   cp "$BLD/jars/matou-minimap.jar" "dist/matou-minimap-$VERSION.jar"
   cp "$BLD/jars/matoubridge-reobf.jar" "dist/matoubridge-$VERSION.jar"
-  cp ../example1/content/owned.matou ../example1/content/additive.matou ../example1/content/structure.matou dist/matou-content/
-  printf '# Copy to <server>/config/matoubridge/packs.cfg and replace <SERVER>.\n# Wire y=63 keeps plane cells on their own slice, off the structure slices (64..65).\n# The wire block is the registered custom ore (registry event registers example1:my_ore from owned.matou); aliases stay vanilla stone.\nfr.iamacat.example1.ExamplePack 63 example1:my_ore ownedFile=<SERVER>/matou-content/owned.matou scatterFile=<SERVER>/matou-content/additive.matou structureFile=<SERVER>/matou-content/structure.matou block.example1.structures:hut_wall=minecraft:stone block.example1.structures:hut_roof=minecraft:stone\n' > dist/packs.cfg.example
-  (cd dist && sha256sum "matou-spi-$VERSION.jar" "matou-example1-$VERSION.jar" "matou-minimap-$VERSION.jar" "matoubridge-$VERSION.jar" matou-content/owned.matou matou-content/additive.matou matou-content/structure.matou packs.cfg.example > SHA256SUMS.txt)
+  cp ../example1/content/owned.matou ../example1/content/additive.matou ../example1/content/structure.matou ../example1/content/vein.matou dist/matou-content/
+  printf '# Copy to <server>/config/matoubridge/packs.cfg and replace <SERVER>.\n# Wire y=63 keeps plane cells on their own slice, off the structure slices (64..65).\n# The wire block is the registered custom ore (registry event registers example1:my_ore from owned.matou); aliases stay vanilla stone.\n# Vein clusters land on the BASE_Y=60 band (slices 60..61) as the registered ore via the veinblock alias.\nfr.iamacat.example1.ExamplePack 63 example1:my_ore ownedFile=<SERVER>/matou-content/owned.matou scatterFile=<SERVER>/matou-content/additive.matou structureFile=<SERVER>/matou-content/structure.matou block.example1.structures:hut_wall=minecraft:stone block.example1.structures:hut_roof=minecraft:stone veinFile=<SERVER>/matou-content/vein.matou veinblock.example1.content:my_ore=example1:my_ore\n' > dist/packs.cfg.example
+  (cd dist && sha256sum "matou-spi-$VERSION.jar" "matou-example1-$VERSION.jar" "matou-minimap-$VERSION.jar" "matoubridge-$VERSION.jar" matou-content/owned.matou matou-content/additive.matou matou-content/structure.matou matou-content/vein.matou packs.cfg.example > SHA256SUMS.txt)
   (cd dist && sha256sum -c SHA256SUMS.txt)
   echo "ok r2-release : dist/ assembled (VERSION=$VERSION)"
   exit 0
@@ -418,8 +418,10 @@ rm -rf "$SERV/matou-content" && cp -r ../example1/content "$SERV/matou-content"
 # slices (64..65), so the verdict stays per-shape sensitive despite the
 # set collapse (a 2D and a 3D cell can share x,z, never y). The wire
 # block is the registered custom ore (preInit queues it from owned.matou,
-# the registry event registers it before init binds resolve it).
-printf 'fr.iamacat.example1.ExamplePack 63 example1:my_ore ownedFile=%s/matou-content/owned.matou scatterFile=%s/matou-content/additive.matou structureFile=%s/matou-content/structure.matou block.example1.structures:hut_wall=minecraft:stone block.example1.structures:hut_roof=minecraft:stone\n' "$SERV" "$SERV" "$SERV" > "$SERV/config/matoubridge/packs.cfg"
+# the registry event registers it before init binds resolve it). Vein
+# clusters land on their own band (BASE_Y=60, slices 60..61) as the
+# registered ore through the veinblock alias.
+printf 'fr.iamacat.example1.ExamplePack 63 example1:my_ore ownedFile=%s/matou-content/owned.matou scatterFile=%s/matou-content/additive.matou structureFile=%s/matou-content/structure.matou block.example1.structures:hut_wall=minecraft:stone block.example1.structures:hut_roof=minecraft:stone veinFile=%s/matou-content/vein.matou veinblock.example1.content:my_ore=example1:my_ore\n' "$SERV" "$SERV" "$SERV" "$SERV" > "$SERV/config/matoubridge/packs.cfg"
 echo "eula=true" > "$SERV/eula.txt"
 printf 'online-mode=false\nlevel-type=FLAT\ngamemode=1\ndifficulty=0\nmotd=C3 live proof\nmax-tick-time=-1\n' > "$SERV/server.properties"
 rm -rf "$SERV/world" "$SERV/logs"
@@ -443,16 +445,19 @@ grep -a -q "matoubridge" $LOGS \
   || { echo "FAIL c3-live : mod never loaded"; exit 1; }
 echo "ok c3-live : bind clean, ticks clean"
 
-# 7. Positive proof: world blocks in chunks (0..1, -1..1) at y=63..65 must
-#    equal the pure decision union — nothing foreign, nothing missing.
+# 7. Positive proof: world blocks in chunks (0..1, -1..1) at y=60..61
+#    plus y=63..65 must equal the pure decision union — nothing foreign,
+#    nothing missing.
 #    Plane cells land the wire block at y=63 (the registered custom ore,
 #    whose runtime numeric ID is dynamic — resolved below from the init
 #    registration line in the boot log, never hardcoded); volume cells
 #    land at their own y=64..65 under their landable names (vanilla
-#    stone, frozen ID 1). Structure offsets reach x,z=17, and the hut
-#    anchor z=-4 spills into chunk row -1 (region r.0.-1.mca) — hence
-#    the 6-chunk, 3-slice read. (Same geometry as B3: the mod writes
-#    force chunk generation around the origin regardless of world spawn.)
+#    stone, frozen ID 1); vein clusters land at their own y=60..61 as
+#    the registered ore (dynamic ID, same table). Structure offsets reach
+#    x,z=17, and the hut anchor z=-4 spills into chunk row -1 (region
+#    r.0.-1.mca) — hence the 6-chunk, 5-slice read. (Same geometry as B3:
+#    the mod writes force chunk generation around the origin regardless
+#    of world spawn.)
 "$J8/javac" -cp "$BLD/spi:$BLD/ex1" -d "$BLD" tools/live/CellUnion.java
 "$J8/java" -cp "$BLD:$BLD/spi:$BLD/ex1" CellUnion \
   "$SERV/config/matoubridge/packs.cfg" 4000 "$BLD/union.txt"
@@ -463,7 +468,7 @@ echo "ok c3-live : my_ore id $ORE_ID (dynamic, from boot log)"
 for spec in "r.0.0.mca 0 0" "r.0.0.mca 1 0" "r.0.0.mca 0 1" \
     "r.0.0.mca 1 1" "r.0.-1.mca 0 -1" "r.0.-1.mca 1 -1"; do
   set -- $spec
-  for y in 63 64 65; do
+  for y in 60 61 63 64 65; do
     python3 tools/live/anvil.py "$SERV/world/region/$1" "$2" "$3" "$y" \
       | awk -v cx="$2" -v cz="$3" -v y="$y" \
         '{split($1, a, ","); print (cx*16+a[1])" "y" "(cz*16+a[2])" "$2}' \
@@ -509,7 +514,7 @@ for line in open(sys.argv[1]):
 rows = [l.split() for l in open(sys.argv[2])]
 w = {(int(x), int(y), int(z)): i for x, y, z, i in rows}
 if not w:
-    print("FAIL c3-live : world empty at y=63..65 (no tick applied?)")
+    print("FAIL c3-live : world empty at y=60..61,63..65 (no tick applied?)")
     sys.exit(1)
 if set(w.values()) - set(table.values()):
     print("FAIL c3-live : foreign block ids %s" % sorted(set(w.values()) - set(table.values())))
