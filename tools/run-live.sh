@@ -497,8 +497,8 @@ rm -rf "$BLD/bridgemod" && mkdir -p "$BLD/bridgemod"
 cp -r "$BLD/forge/"* "$BLD/bridgemod/"
 # Stubs are compile-only: they must never ship (a fake Block on the
 # runtime classpath would shadow vanilla). Refuse loudly if leaked.
-rm -rf "$BLD/bridgemod/net"
-if [ -e "$BLD/bridgemod/net" ]; then
+rm -rf "$BLD/bridgemod/net" "$BLD/bridgemod/org"
+if [ -e "$BLD/bridgemod/net" ] || [ -e "$BLD/bridgemod/org" ]; then
   echo "FAIL c3-live : stub leak into mod jar"
   exit 1
 fi

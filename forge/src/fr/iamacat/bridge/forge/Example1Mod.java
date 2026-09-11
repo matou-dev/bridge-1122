@@ -256,6 +256,7 @@ public final class Example1Mod {
         IRenderFactory<MatouEntity> pigs = RenderPig::new;
         RenderingRegistry.registerEntityRenderingHandler(
                 MatouEntity.class, pigs);
+        InstancedMeshRenderer.initClient();
     }
 
     /**

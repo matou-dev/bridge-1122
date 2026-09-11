@@ -16,6 +16,11 @@ public class Entity {
     public double posX;
     public double posY;
     public double posZ;
+    public double lastTickPosX;
+    public double lastTickPosY;
+    public double lastTickPosZ;
+    public float rotationYaw;
+    public float rotationPitch;
     public boolean isDead;
 
     public void setPositionAndRotation(double x, double y, double z,
