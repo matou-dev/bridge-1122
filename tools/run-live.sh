@@ -587,12 +587,15 @@ set -e
 echo "ok c3-live : server ran ($BOOT_SECS s)"
 
 # 6. Fail loudly on any runtime refusal or linkage error (stdout log plus
-#    the rolling server log — FML splits output across both).
+#    the rolling server log — FML splits output across both). E_MODEL rides
+#    the grep: the model path is client-only, so any model refusal on the
+#    server is a no-regression breach, never a silent pass (hub
+#    decisions/MATOU_MODEL.md, server half of the live proof).
 LOGS="$SERV/boot-c3.log"
 [ -f "$SERV/logs/latest.log" ] && LOGS="$LOGS $SERV/logs/latest.log"
-if grep -a -q "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|Encountered an unexpected exception" $LOGS; then
+if grep -a -q "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|Encountered an unexpected exception" $LOGS; then
   echo "FAIL c3-live : runtime refusal (see $SERV/boot-c3.log)"
-  grep -a -m5 "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|Caused by" $LOGS
+  grep -a -m5 "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|Caused by" $LOGS
   exit 1
 fi
 grep -a -q "matoubridge" $LOGS \
