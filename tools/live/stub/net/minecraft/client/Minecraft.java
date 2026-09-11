@@ -1,7 +1,7 @@
 package net.minecraft.client;
 
+import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.Entity;
-import net.minecraft.world.World;
 import net.minecraft.world.WorldSettings;
 
 /**
@@ -18,7 +18,10 @@ import net.minecraft.world.WorldSettings;
  * pinned joined.tsrg).
  */
 public class Minecraft {
-    public World world;
+    // True type is WorldClient (field_71438_f) — a World-typed fieldref
+    // would die linking (JVM field resolution matches the descriptor
+    // exactly). Measured via javap on the pinned client bytes.
+    public WorldClient world;
 
     public static Minecraft getMinecraft() {
         return null;
