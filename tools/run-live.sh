@@ -126,12 +126,41 @@ fi
 echo "$MCP_CONFIG_SHA1  $C3_DIR/mcp_config-1.12.2.zip" | sha1sum -c - >/dev/null 2>&1 \
   || { echo "FAIL c3-live : MCP config sha1 drift (want $MCP_CONFIG_SHA1)"; exit 1; }
 echo "ok c3-live : server provisioned (pins verified)"
+# Vanilla CLIENT jar (pinned once in tools/autoplay/client-pin.txt — the
+# companion derive already trusts it; this script reuses the same bytes,
+# never its own pin): client-only vanilla members (net/minecraft/client/*,
+# e.g. the renderer tranche's Minecraft/getMinecraft) cannot javap-verify
+# against the notch SERVER jar (no client classes in it), so the derive
+# below checks those rows against these bytes instead. Same offline rule
+# as every other fetch above.
+CLIENT_PIN_URL="$(sed -n 's/^URL=//p' tools/autoplay/client-pin.txt)"
+CLIENT_PIN_SHA1="$(sed -n 's/^SHA1=//p' tools/autoplay/client-pin.txt)"
+[ -n "$CLIENT_PIN_URL" ] && [ -n "$CLIENT_PIN_SHA1" ] \
+  || { echo "FAIL c3-live : malformed tools/autoplay/client-pin.txt (want URL= + SHA1=)"; exit 1; }
+MCCLIENT="$C3_DIR/vanilla-client.jar"
+if [ ! -f "$MCCLIENT" ] || ! echo "$CLIENT_PIN_SHA1  $MCCLIENT" | sha1sum -c - >/dev/null 2>&1; then
+  if [ "${C3_OFFLINE:-}" = "1" ]; then
+    echo "FAIL c3-live : offline and vanilla client absent ($MCCLIENT)"
+    exit 1
+  fi
+  echo "note c3-live : fetching pinned vanilla client (network once, $CLIENT_PIN_SHA1)"
+  rm -f "$MCCLIENT"
+  curl -sL -o "$MCCLIENT" "$CLIENT_PIN_URL" \
+    || { echo "FAIL c3-live : vanilla client download failed"; exit 1; }
+  echo "$CLIENT_PIN_SHA1  $MCCLIENT" | sha1sum -c - >/dev/null 2>&1 \
+    || { echo "FAIL c3-live : vanilla client sha1 drift (want $CLIENT_PIN_SHA1, never silent upgrade)"; exit 1; }
+fi
+echo "ok c3-live : vanilla client pinned ($CLIENT_PIN_SHA1)"
 
 # 2. Derive the narrow MCP->SRG map from pinned bytes (no srg-mcp.srg on
-#    1.12.2): joined.tsrg gives obf<->SRG per class, the notch server jar
-#    disambiguates overloads and static-ness via javap (exactly-one assert
-#    per member, loud otherwise). The map covers every vanilla member our
-#    forge/ bytecode references (verified by constant-pool scan at C3 time:
+#    1.12.2): joined.tsrg gives obf<->SRG per class, the notch jars
+#    disambiguate overloads and static-ness via javap (exactly-one assert
+#    per member, loud otherwise): the notch SERVER jar for shared classes,
+#    the pinned vanilla CLIENT jar for net/minecraft/client/* rows (no
+#    client classes in the server jar). The map covers every vanilla
+#    member our forge/ bytecode references (step 3b scans the built MCP
+#    jar against it — Reobf passes unmapped names through silently, so an
+#    uncovered ref dies linking live, never here quietly):
 #    getBlockFromName, getDefaultState, setBlockState, provider, plus the
 #    registration tranche: setHardness, getIdFromBlock, isOpaqueCube,
 #    Material/ROCK, plus the custom entity tranche (Forge-side, pinned in
@@ -148,15 +177,16 @@ echo "ok c3-live : server provisioned (pins verified)"
 #    pinned below) + isRemote/provider/getDimension (passthrough) +
 #    IBlockState/getBlock + Vec3i/getX/getY/getZ, the stone resolve and
 #    the sink land reuse getBlockFromName/getDefaultState/setBlockState —
-#    all pinned by earlier tranches, so the narrow map stays 30 lines.
+#    all pinned by earlier tranches, so the narrow map stays 42 lines
+#    (34 server rows plus the 8 renderer rows below).
 #    WorldProvider.getDimension is NOT mapped on purpose: it is Forge-added
 #    (11 readable call sites in the pinned universal, e.g. DimensionManager),
 #    hence runtime-final — Reobf passes it through by design, and the live
 #    verdict proves it behaviorally (a wrong dim gate skips every tick, so
 #    the world would come back empty, never silently wrong).
-python3 - "$C3_DIR/mcp_config-1.12.2.zip" "$MCSERV" "$J8/javap" "$C3_DIR/srg-narrow.srg" <<'EOF'
+python3 - "$C3_DIR/mcp_config-1.12.2.zip" "$MCSERV" "$J8/javap" "$C3_DIR/srg-narrow.srg" "$MCCLIENT" <<'EOF'
 import re, subprocess, sys, zipfile
-mcpcfg, server, javap, outpath = sys.argv[1:5]
+mcpcfg, server, javap, outpath, client = sys.argv[1:6]
 tsrg = zipfile.ZipFile(mcpcfg).read("config/joined.tsrg").decode("utf-8")
 # (owner_srg, mcp_name, desc_srg, kind, static?) — the full vanilla surface
 # of forge/ (constant-pool truth, C3 time). Rows with a 6th element carry
@@ -213,6 +243,23 @@ WANT = [
     ("net/minecraft/item/Item", "setUnlocalizedName", "(Ljava/lang/String;)Lnet/minecraft/item/Item;", "method", False, "func_77655_b"),
     ("net/minecraft/item/Item", "getIdFromItem", "(Lnet/minecraft/item/Item;)I", "method", True, "func_150891_b"),
     ("net/minecraft/item/Item", "getByNameOrId", "(Ljava/lang/String;)Lnet/minecraft/item/Item;", "method", True, "func_111206_d"),
+    # Renderer tranche (hub decisions/MATOU_MODEL.md, visual proof): every
+    # net/minecraft/* member the client-only InstancedMeshRenderer touches
+    # (Entity rows verify against the server jar like every row above,
+    # client-class rows against the pinned client jar — the per-row rule
+    # at the javap call sites). The getMinecraft anchor rides the
+    # companion pin (tools/autoplay/want.txt, same joined.tsrg) and this
+    # derive re-verifies it — never recalled. Found live 2026-09-11: the
+    # first RenderWorldLastEvent crashed the client (NoSuchMethodError
+    # getMinecraft) because the map covered server refs only.
+    ("net/minecraft/client/Minecraft", "getMinecraft", "()Lnet/minecraft/client/Minecraft;", "method", True, "func_71410_x"),
+    ("net/minecraft/client/Minecraft", "world", "Lnet/minecraft/world/World;", "field", False),
+    ("net/minecraft/client/Minecraft", "getRenderViewEntity", "()Lnet/minecraft/entity/Entity;", "method", False),
+    ("net/minecraft/entity/Entity", "lastTickPosX", "D", "field", False),
+    ("net/minecraft/entity/Entity", "lastTickPosY", "D", "field", False),
+    ("net/minecraft/entity/Entity", "lastTickPosZ", "D", "field", False),
+    ("net/minecraft/entity/Entity", "rotationYaw", "F", "field", False),
+    ("net/minecraft/entity/Entity", "rotationPitch", "F", "field", False),
 ]
 srg2obf, classes = {}, {}
 cur = None
@@ -248,9 +295,11 @@ def obf_ftype(d):
         return PRIM[d]
     return obf_desc(d)[1:-1].replace("/", ".")
 
-def javap_flags(cls):
-    # -> {(name, descriptor-or-F:type): is_static} from the notch server jar.
-    out = subprocess.check_output([javap, "-p", "-s", "-cp", server, cls]).decode()
+def javap_flags(cls, jar):
+    # -> {(name, descriptor-or-F:type): is_static} from the notch jar
+    # holding the class (server jar, or the pinned client jar for
+    # net/minecraft/client/* — chosen per row below, never defaulted).
+    out = subprocess.check_output([javap, "-p", "-s", "-cp", jar, cls]).decode()
     res, name, static = {}, None, False
     for l in out.splitlines():
         s = l.strip()
@@ -273,6 +322,11 @@ lines = []
 for row in WANT:
     owner, mcp, desc, kind, want_static = row[:5]
     anchor = row[5] if len(row) > 5 else None
+    # Client classes live in the client jar only — every other owner in
+    # the server jar. No default: a future package outside both fails at
+    # javap loudly (check_output raises), never maps against the wrong
+    # bytes silently. Only net/minecraft/client/* exists there today.
+    jar = client if owner.startswith("net/minecraft/client/") else server
     obf_owner = srg2obf[owner]
     members = classes[owner]
     if kind == "method":
@@ -281,7 +335,7 @@ for row in WANT:
         if anchor is not None:
             cands = [(n, s) for n, s in cands if s == anchor]
         assert cands, "E_SRG_DERIVE:no tsrg member <%s %s>" % (owner, mcp)
-        flags = javap_flags(obf_owner)
+        flags = javap_flags(obf_owner, jar)
         hits = [(n, s) for n, s in cands if flags.get((n, od)) == want_static]
         assert len(hits) == 1, "E_SRG_DERIVE:ambiguous <%s %s> %s" % (owner, mcp, hits)
         lines.append("MD: %s/%s %s %s/%s %s" % (owner, hits[0][1], desc, owner, mcp, desc))
@@ -290,20 +344,20 @@ for row in WANT:
             found = [m for m in members if len(m) == 2 and m[1] == anchor]
             assert len(found) == 1, "E_SRG_DERIVE:no tsrg field <%s %s>" % (owner, anchor)
             ftype_obf = obf_ftype(desc)
-            flags = javap_flags(obf_owner)
+            flags = javap_flags(obf_owner, jar)
             assert flags.get((found[0][0], "F:" + ftype_obf)) == want_static, \
                 "E_SRG_DERIVE:field shape <%s %s>" % (owner, anchor)
             lines.append("FD: %s/%s %s/%s" % (owner, anchor, owner, mcp))
             continue
         ftype_obf = obf_ftype(desc)
-        flags = javap_flags(obf_owner)
+        flags = javap_flags(obf_owner, jar)
         flds = [n for (n, d), st in flags.items()
                 if d == "F:" + ftype_obf and st == want_static]
         assert len(flds) == 1, "E_SRG_DERIVE:ambiguous field <%s %s> %s" % (owner, mcp, flds)
         hits = [m for m in members if len(m) == 2 and m[0] == flds[0]]
         assert len(hits) == 1, "E_SRG_DERIVE:no tsrg field <%s %s>" % (owner, mcp)
         lines.append("FD: %s/%s %s/%s" % (owner, hits[0][1], owner, mcp))
-assert len(lines) == 34, "E_SRG_DERIVE:want 34 lines, got %d" % len(lines)
+assert len(lines) == 42, "E_SRG_DERIVE:want 42 lines, got %d" % len(lines)
 open(outpath, "w").write("\n".join(lines) + "\n")
 print("ok c3-live : narrow SRG derived (%d lines)" % len(lines))
 EOF
@@ -352,10 +406,18 @@ pin_method "net/minecraft/item/Item/setMaxStackSize" "(I)Lnet/minecraft/item/Ite
 pin_method "net/minecraft/item/Item/setUnlocalizedName" "(Ljava/lang/String;)Lnet/minecraft/item/Item;"
 pin_method "net/minecraft/item/Item/getIdFromItem" "(Lnet/minecraft/item/Item;)I"
 pin_method "net/minecraft/item/Item/getByNameOrId" "(Ljava/lang/String;)Lnet/minecraft/item/Item;"
+pin_method "net/minecraft/client/Minecraft/getMinecraft" "()Lnet/minecraft/client/Minecraft;"
+pin_field "net/minecraft/client/Minecraft/world"
+pin_method "net/minecraft/client/Minecraft/getRenderViewEntity" "()Lnet/minecraft/entity/Entity;"
+pin_field "net/minecraft/entity/Entity/lastTickPosX"
+pin_field "net/minecraft/entity/Entity/lastTickPosY"
+pin_field "net/minecraft/entity/Entity/lastTickPosZ"
+pin_field "net/minecraft/entity/Entity/rotationYaw"
+pin_field "net/minecraft/entity/Entity/rotationPitch"
 grep -q "getDimension" "$SRG_NARROW" \
   && { echo "FAIL c3-live : getDimension must stay unmapped (Forge-added, runtime-final)"; exit 1; }
-[ "$(grep -c . "$SRG_NARROW")" = "34" ] \
-  || { echo "FAIL c3-live : narrow map drift (want 34 lines)"; exit 1; }
+[ "$(grep -c . "$SRG_NARROW")" = "42" ] \
+  || { echo "FAIL c3-live : narrow map drift (want 42 lines)"; exit 1; }
 echo "ok c3-live : stubs pinned to derived SRG"
 
 # 2c. Pin every stubbed Forge member against the provisioned 2860 universal.
@@ -506,6 +568,108 @@ cp "$BLD/mcmod.info" "$BLD/bridgemod/mcmod.info"
 touch -h -d "@$EPOCH" "$BLD/bridgemod/mcmod.info"
 mkjar "$BLD/jars/matoubridge.jar" "$BLD/bridgemod"
 echo "ok c3-live : jars built (VERSION=$VERSION)"
+
+# 3b. Narrow-map coverage: every net/minecraft/* member the built MCP jar
+#     references must resolve in the derived map. Reobf passes unmapped
+#     names through silently, so an uncovered ref dies linking live (the
+#     visual tranche found the first RenderWorldLastEvent crashing on
+#     unmapped getMinecraft — the map covered server refs only, and the
+#     step-2 comment claiming full coverage had no check behind it). The
+#     walk mirrors Reobf.walk exactly (in-jar superclass chain, fields by
+#     name): <init>/<clinit> never rename, Forge/LWJGL owners pass through
+#     by design, so neither is asserted. ALLOW is Forge-added runtime-final
+#     (MCP name at runtime — the registration paths execute every server
+#     run, and 2b refuses these names IN the map).
+python3 - "$BLD/jars/matoubridge.jar" "$SRG_NARROW" <<'EOF'
+import struct, sys, zipfile
+jar, mapf = sys.argv[1:3]
+methods, fields = set(), set()
+for raw in open(mapf):
+    t = raw.split()
+    if not t:
+        continue
+    if t[0] == "MD:":
+        own, name = t[3].rsplit("/", 1)
+        methods.add((own, name, t[4]))
+    elif t[0] == "FD:":
+        own, name = t[2].rsplit("/", 1)
+        fields.add((own, name))
+ALLOW = {
+    ("net/minecraft/world/WorldProvider", "getDimension"),
+    ("net/minecraft/block/Block", "setRegistryName"),
+    ("net/minecraft/item/Item", "setRegistryName"),
+}
+def u(pool, i):
+    return pool[i][1].decode("utf-8")
+def parse(data):
+    assert data[:4] == b"\xca\xfe\xba\xbe", "E_MAP_COVER:not a class"
+    n = struct.unpack(">H", data[8:10])[0]
+    pool = [None] * n
+    i, p = 1, 10
+    while i < n:
+        tag = data[p]
+        p += 1
+        if tag == 1:
+            ln = struct.unpack(">H", data[p:p + 2])[0]
+            pool[i] = (tag, data[p + 2:p + 2 + ln])
+            p += 2 + ln
+        elif tag in (7, 8, 16, 19, 20):
+            pool[i] = (tag, struct.unpack(">H", data[p:p + 2])[0])
+            p += 2
+        elif tag in (9, 10, 11, 12, 17, 18):
+            pool[i] = (tag, struct.unpack(">H", data[p:p + 2])[0],
+                       struct.unpack(">H", data[p + 2:p + 4])[0])
+            p += 4
+        elif tag == 15:
+            p += 3
+        elif tag in (3, 4):
+            p += 4
+        elif tag in (5, 6):
+            p += 8
+            i += 1
+        else:
+            raise AssertionError("E_MAP_COVER:bad tag %d" % tag)
+        i += 1
+    this_idx = struct.unpack(">H", data[p + 2:p + 4])[0]
+    super_idx = struct.unpack(">H", data[p + 4:p + 6])[0]
+    this_name = u(pool, pool[this_idx][1])
+    super_name = u(pool, pool[super_idx][1]) if super_idx else None
+    refs = []
+    for e in pool[1:]:
+        if e is None or e[0] not in (9, 10, 11):
+            continue
+        owner = u(pool, pool[e[1]][1])
+        _, ni, di = pool[e[2]]
+        refs.append((owner, u(pool, ni), u(pool, di), e[0] == 9))
+    return this_name, super_name, refs
+z = zipfile.ZipFile(jar)
+supers, allrefs = {}, []
+for info in z.infolist():
+    if not info.filename.endswith(".class"):
+        continue
+    this_name, super_name, refs = parse(z.read(info.filename))
+    supers[this_name] = super_name
+    allrefs.extend(refs)
+missing = []
+for owner, name, desc, is_field in allrefs:
+    if not owner.startswith("net/minecraft/") or name in ("<init>", "<clinit>"):
+        continue
+    o, hit = owner, False
+    while o is not None:
+        if is_field:
+            if (o, name) in fields:
+                hit = True
+                break
+        elif (o, name, desc) in methods:
+            hit = True
+            break
+        o = supers.get(o)
+    if not hit and (owner, name) not in ALLOW:
+        missing.append("%s %s %s %s" % ("FD" if is_field else "MD", owner, name, desc))
+assert not missing, "E_MAP_COVER:unmapped vanilla refs:\n%s" % "\n".join(sorted(set(missing)))
+print("ok c3-live : narrow map covers forge refs")
+EOF
+echo "ok c3-live : narrow map covers forge refs"
 
 # 4. Reobfuscate MCP-named refs to SRG (ForgeGradle reobf equivalent:
 #    runtime vanilla only declares SRG names, so un-reobfed jars die with
