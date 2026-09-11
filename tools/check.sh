@@ -93,6 +93,18 @@ java -cp build/sib fr.iamacat.bridge.model.ModelWireCheck
 rm -rf forge/build && mkdir -p forge/build
 javac --release 8 -cp build/sib -d forge/build $(find forge/src tools/live/stub -name '*.java')
 echo "ok (forge-2860-stub)"
+# Visual-tranche tripwire (found 2026-09-11: the autoplay companion had
+# not compiled since the item tranche — missing Item import plus a
+# duplicate Minecraft stub — because no gate built it, only run-client.sh
+# AUTOPLAY=1 did, at run time). DEV-only compile against stubs, never
+# shipped, never run here; tools/autoplay/stub is optional (see hub
+# tools/run-client.sh — 1122 merged its shapes into tools/live/stub).
+mkdir -p build/auto
+AUTO_SRC="tools/autoplay/src tools/live/stub"
+[ -d tools/autoplay/stub ] && AUTO_SRC="$AUTO_SRC tools/autoplay/stub"
+# shellcheck disable=SC2086
+javac --release 8 -cp build/sib:forge/build -d build/auto $(find $AUTO_SRC -name '*.java')
+echo "ok (autoplay-compile)"
 # Etage 3 (C3) : live opt-in. Default skip keeps CI green without
 # network/Java 8; LIVE=1 fails loudly without them, never silently.
 if [ "${LIVE:-}" != "1" ]; then
