@@ -1,0 +1,42 @@
+net/minecraft/block/Block	getBlockFromName	(Ljava/lang/String;)Lnet/minecraft/block/Block;	method	1	
+net/minecraft/block/Block	getDefaultState	()Lnet/minecraft/block/state/IBlockState;	method	0	
+net/minecraft/world/World	setBlockState	(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z	method	0	
+net/minecraft/world/World	provider	Lnet/minecraft/world/WorldProvider;	field	0	
+net/minecraft/block/Block	setHardness	(F)Lnet/minecraft/block/Block;	method	0	func_149711_c
+net/minecraft/block/Block	getIdFromBlock	(Lnet/minecraft/block/Block;)I	method	1	func_149682_b
+net/minecraft/block/Block	isOpaqueCube	(Lnet/minecraft/block/state/IBlockState;)Z	method	0	func_149662_c
+net/minecraft/block/material/Material	ROCK	Lnet/minecraft/block/material/Material;	field	1	field_151576_e
+net/minecraft/world/World	spawnEntity	(Lnet/minecraft/entity/Entity;)Z	method	0	func_72838_d
+net/minecraft/entity/item/EntityItem	getItem	()Lnet/minecraft/item/ItemStack;	method	0	func_92059_d
+net/minecraft/item/ItemStack	getItem	()Lnet/minecraft/item/Item;	method	0	func_77973_b
+net/minecraft/init/Items	diamond	Lnet/minecraft/item/Item;	field	1	field_151045_i
+net/minecraft/entity/Entity	world	Lnet/minecraft/world/World;	field	0	field_70170_p
+net/minecraft/entity/Entity	posX	D	field	0	field_70165_t
+net/minecraft/entity/Entity	posY	D	field	0	field_70163_u
+net/minecraft/entity/Entity	posZ	D	field	0	field_70161_v
+net/minecraft/world/World	isRemote	Z	field	0	field_72995_K
+net/minecraft/block/state/IBlockState	getBlock	()Lnet/minecraft/block/Block;	method	0	func_177230_c
+net/minecraft/util/math/Vec3i	getX	()I	method	0	func_177958_n
+net/minecraft/util/math/Vec3i	getY	()I	method	0	func_177956_o
+net/minecraft/util/math/Vec3i	getZ	()I	method	0	func_177952_p
+net/minecraft/entity/Entity	getEntityId	()I	method	0	func_145782_y
+net/minecraft/entity/Entity	isDead	Z	field	0	field_70128_L
+net/minecraft/world/World	loadedEntityList	Ljava/util/List;	field	0	field_72996_f
+net/minecraft/entity/Entity	setPositionAndRotation	(DDDFF)V	method	0	func_70080_a
+net/minecraft/entity/EntityLivingBase	getEntityAttribute	(Lnet/minecraft/entity/ai/attributes/IAttribute;)Lnet/minecraft/entity/ai/attributes/IAttributeInstance;	method	0	func_110148_a
+net/minecraft/entity/EntityLivingBase	getMaxHealth	()F	method	0	func_110138_aP
+net/minecraft/entity/EntityLivingBase	setHealth	(F)V	method	0	func_70606_j
+net/minecraft/entity/ai/attributes/IAttributeInstance	setBaseValue	(D)V	method	0	func_111128_a
+net/minecraft/entity/SharedMonsterAttributes	maxHealth	Lnet/minecraft/entity/ai/attributes/IAttribute;	field	1	field_111267_a
+net/minecraft/item/Item	setMaxStackSize	(I)Lnet/minecraft/item/Item;	method	0	func_77656_e
+net/minecraft/item/Item	setUnlocalizedName	(Ljava/lang/String;)Lnet/minecraft/item/Item;	method	0	func_77655_b
+net/minecraft/item/Item	getIdFromItem	(Lnet/minecraft/item/Item;)I	method	1	func_150891_b
+net/minecraft/item/Item	getByNameOrId	(Ljava/lang/String;)Lnet/minecraft/item/Item;	method	1	func_111206_d
+net/minecraft/client/Minecraft	getMinecraft	()Lnet/minecraft/client/Minecraft;	method	1	func_71410_x
+net/minecraft/client/Minecraft	world	Lnet/minecraft/client/multiplayer/WorldClient;	field	0	field_71441_e
+net/minecraft/client/Minecraft	getRenderViewEntity	()Lnet/minecraft/entity/Entity;	method	0	func_175606_aa
+net/minecraft/entity/Entity	lastTickPosX	D	field	0	field_70142_S
+net/minecraft/entity/Entity	lastTickPosY	D	field	0	field_70137_T
+net/minecraft/entity/Entity	lastTickPosZ	D	field	0	field_70136_U
+net/minecraft/entity/Entity	rotationYaw	F	field	0	field_70177_z
+net/minecraft/entity/Entity	rotationPitch	F	field	0	field_70125_A

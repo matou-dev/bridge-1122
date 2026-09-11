@@ -28,11 +28,30 @@
 # Reproducibility pins: installer / universal / vanilla server / MCP config /
 # ASM sha1 below. Any upstream drift fails loudly instead of running against
 # unknown bytes. 1.12.2 ships no srg-mcp.srg (ForgeGradle is not required):
-# the 8-line narrow map derives deterministically from the pinned vanilla
+# the 42-line narrow map derives deterministically from the pinned vanilla
 # server + joined.tsrg (see step 2), so the pins below are the whole
 # upstream surface.
 set -eu
 cd "$(dirname "$0")/.."
+# Shared harness steps (hub SSOT, thin version wrapper — hub
+# decisions/LIVE_SHELL_COMMON.md): sibling-absent fails loud, same shim
+# discipline as tools/run-client.sh.
+[ -f ../hub/tools/live-common.sh ] \
+  || { echo "FAIL c3-live : hub sibling absent (clone hub next to bridge-1122 — live steps source ../hub/tools/live-common.sh)"; exit 1; }
+[ -f ../hub/tools/live-derive.sh ] \
+  || { echo "FAIL c3-live : hub sibling absent (clone hub next to bridge-1122 — derive steps source ../hub/tools/live-derive.sh)"; exit 1; }
+# shellcheck disable=SC1091
+. ../hub/tools/live-common.sh
+# shellcheck disable=SC1091
+. ../hub/tools/live-derive.sh
+live_init "c3-live"
+# Era-bound adapters: the hub libs own the mechanics; these bind the
+# caller-owned map/jars so every pin/jar call site below stays byte-identical.
+pin_method() { live_pin_method "$SRG_NARROW" "$@"; }
+pin_field() { live_pin_field "$SRG_NARROW" "$@"; }
+pin_uni() { live_pin_uni "$J8" "$UNI" "$@"; }
+mkjar() { live_mkjar "$1" "$2" "$BLD/MANIFEST.MF" "$J8/jar" "$EPOCH"; }
+normjar() { live_normjar "$1" "$EPOCH"; }
 C3_DIR="${C3_DIR:-${TMPDIR:-/tmp}/matou-c3-live}"
 JAVA8_HOME="${JAVA8_HOME:-/usr/lib/jvm/java-8-openjdk}"
 FORGE_URL="${FORGE_URL:-https://maven.minecraftforge.net/net/minecraftforge/forge/1.12.2-14.23.5.2860/forge-1.12.2-14.23.5.2860-installer.jar}"
@@ -74,37 +93,11 @@ fi
 mkdir -p "$C3_DIR"
 SERV="$C3_DIR/server"
 mkdir -p "$SERV"
-# 1a. C3_DIR preflight: docker runs leave root-owned leftovers (build/,
-#     world/, logs/, matou-content/) that a host run cannot clear file by
-#     file (rm needs write on the root-owned parent). Fail fast with the fix
-#     instead of dying mid-run or reusing stale state silently.
-if [ -e "$C3_DIR" ]; then
-  BAD_OWNER=$(find "$C3_DIR" ! -user "$(id -un)" -print -quit 2>/dev/null || true)
-  if [ -n "$BAD_OWNER" ]; then
-    echo "FAIL c3-live : C3_DIR=<$C3_DIR> has non-owned leftovers (e.g. <$BAD_OWNER> from a docker run as root)"
-    echo "fix: sudo rm -rf <$C3_DIR/build> <$C3_DIR/server/world> <$C3_DIR/server/logs> <$C3_DIR/server/matou-content> OR C3_DIR=/tmp/matou-c3-clean $0"
-    exit 1
-  fi
-  if [ ! -w "$C3_DIR" ]; then
-    echo "FAIL c3-live : C3_DIR=<$C3_DIR> not writable (fix ownership or point C3_DIR at a user-owned dir)"
-    exit 1
-  fi
-fi
-if [ ! -f "$C3_DIR/forge-installer.jar" ]; then
-  if [ "${C3_OFFLINE:-}" = "1" ]; then
-    echo "FAIL c3-live : offline and installer absent ($C3_DIR/forge-installer.jar)"
-    exit 1
-  fi
-  curl -sL -o "$C3_DIR/forge-installer.jar" "$FORGE_URL" \
-    || { echo "FAIL c3-live : installer download"; exit 1; }
-fi
-echo "$INSTALLER_SHA1  $C3_DIR/forge-installer.jar" | sha1sum -c - >/dev/null 2>&1 \
-  || { echo "FAIL c3-live : installer sha1 drift (want $INSTALLER_SHA1)"; exit 1; }
+# 1a. C3_DIR preflight (docker root-owned leftovers fail fast, loudly).
+live_preflight_dir "C3_DIR" "$C3_DIR"
+live_fetch "$C3_DIR/forge-installer.jar" "$FORGE_URL" "$INSTALLER_SHA1" "${C3_OFFLINE:-0}"
 UNI="$SERV/forge-1.12.2-14.23.5.2860.jar"
-if [ ! -f "$UNI" ]; then
-  (cd "$SERV" && "$J8/java" -jar "$C3_DIR/forge-installer.jar" --installServer >/dev/null 2>&1) \
-    || { echo "FAIL c3-live : --installServer"; exit 1; }
-fi
+live_install_server "$SERV" "$C3_DIR/forge-installer.jar" "$J8"
 echo "$UNIVERSAL_SHA1  $UNI" | sha1sum -c - >/dev/null 2>&1 \
   || { echo "FAIL c3-live : universal sha1 drift (want $UNIVERSAL_SHA1)"; exit 1; }
 MCSERV="$SERV/minecraft_server.1.12.2.jar"
@@ -115,16 +108,7 @@ ASM=$(find "$SERV/libraries/org/ow2/asm" -name "$ASM_PIN" | head -n 1)
 [ -n "$ASM" ] || { echo "FAIL c3-live : ASM $ASM_PIN missing from server libs"; exit 1; }
 echo "$ASM_SHA1  $ASM" | sha1sum -c - >/dev/null 2>&1 \
   || { echo "FAIL c3-live : ASM sha1 drift (want $ASM_SHA1)"; exit 1; }
-if [ ! -f "$C3_DIR/mcp_config-1.12.2.zip" ]; then
-  if [ "${C3_OFFLINE:-}" = "1" ]; then
-    echo "FAIL c3-live : offline and MCP config absent ($C3_DIR/mcp_config-1.12.2.zip)"
-    exit 1
-  fi
-  curl -sL -o "$C3_DIR/mcp_config-1.12.2.zip" "$MCP_CONFIG_URL" \
-    || { echo "FAIL c3-live : MCP config download"; exit 1; }
-fi
-echo "$MCP_CONFIG_SHA1  $C3_DIR/mcp_config-1.12.2.zip" | sha1sum -c - >/dev/null 2>&1 \
-  || { echo "FAIL c3-live : MCP config sha1 drift (want $MCP_CONFIG_SHA1)"; exit 1; }
+live_fetch "$C3_DIR/mcp_config-1.12.2.zip" "$MCP_CONFIG_URL" "$MCP_CONFIG_SHA1" "${C3_OFFLINE:-0}"
 echo "ok c3-live : server provisioned (pins verified)"
 # Vanilla CLIENT jar (pinned once in tools/autoplay/client-pin.txt — the
 # companion derive already trusts it; this script reuses the same bytes,
@@ -184,203 +168,12 @@ echo "ok c3-live : vanilla client pinned ($CLIENT_PIN_SHA1)"
 #    hence runtime-final — Reobf passes it through by design, and the live
 #    verdict proves it behaviorally (a wrong dim gate skips every tick, so
 #    the world would come back empty, never silently wrong).
-python3 - "$C3_DIR/mcp_config-1.12.2.zip" "$MCSERV" "$J8/javap" "$C3_DIR/srg-narrow.srg" "$MCCLIENT" <<'EOF'
-import re, subprocess, sys, zipfile
-mcpcfg, server, javap, outpath, client = sys.argv[1:6]
-tsrg = zipfile.ZipFile(mcpcfg).read("config/joined.tsrg").decode("utf-8")
-# (owner_srg, mcp_name, desc_srg, kind, static?) — the full vanilla surface
-# of forge/ (constant-pool truth, C3 time). Rows with a 6th element carry
-# an SRG anchor (stable_39 names, de.oceanlabs.mcp:mcp_stable:39-1.12 on
-# Forge Maven): several vanilla members share one descriptor (e.g.
-# setHardness/setResistance, every Material field), so the anchor picks
-# the intended one — an anchor missing from the pinned bytes fails loud.
-WANT = [
-    ("net/minecraft/block/Block", "getBlockFromName", "(Ljava/lang/String;)Lnet/minecraft/block/Block;", "method", True),
-    ("net/minecraft/block/Block", "getDefaultState", "()Lnet/minecraft/block/state/IBlockState;", "method", False),
-    ("net/minecraft/world/World", "setBlockState", "(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z", "method", False),
-    ("net/minecraft/world/World", "provider", "Lnet/minecraft/world/WorldProvider;", "field", False),
-    ("net/minecraft/block/Block", "setHardness", "(F)Lnet/minecraft/block/Block;", "method", False, "func_149711_c"),
-    ("net/minecraft/block/Block", "getIdFromBlock", "(Lnet/minecraft/block/Block;)I", "method", True, "func_149682_b"),
-    ("net/minecraft/block/Block", "isOpaqueCube", "(Lnet/minecraft/block/state/IBlockState;)Z", "method", False, "func_149662_c"),
-    ("net/minecraft/block/material/Material", "ROCK", "Lnet/minecraft/block/material/Material;", "field", True, "field_151576_e"),
-    ("net/minecraft/world/World", "spawnEntity", "(Lnet/minecraft/entity/Entity;)Z", "method", False, "func_72838_d"),
-    ("net/minecraft/entity/item/EntityItem", "getItem", "()Lnet/minecraft/item/ItemStack;", "method", False, "func_92059_d"),
-    ("net/minecraft/item/ItemStack", "getItem", "()Lnet/minecraft/item/Item;", "method", False, "func_77973_b"),
-    ("net/minecraft/init/Items", "diamond", "Lnet/minecraft/item/Item;", "field", True, "field_151045_i"),
-    ("net/minecraft/entity/Entity", "world", "Lnet/minecraft/world/World;", "field", False, "field_70170_p"),
-    ("net/minecraft/entity/Entity", "posX", "D", "field", False, "field_70165_t"),
-    ("net/minecraft/entity/Entity", "posY", "D", "field", False, "field_70163_u"),
-    ("net/minecraft/entity/Entity", "posZ", "D", "field", False, "field_70161_v"),
-    ("net/minecraft/world/World", "isRemote", "Z", "field", False, "field_72995_K"),
-    ("net/minecraft/block/state/IBlockState", "getBlock", "()Lnet/minecraft/block/Block;", "method", False, "func_177230_c"),
-    ("net/minecraft/util/math/Vec3i", "getX", "()I", "method", False, "func_177958_n"),
-    ("net/minecraft/util/math/Vec3i", "getY", "()I", "method", False, "func_177956_o"),
-    ("net/minecraft/util/math/Vec3i", "getZ", "()I", "method", False, "func_177952_p"),
-    # Spawn tranche (hub decisions/SPAWN.md, T1 vanilla host + hp seam):
-    # the census id, the living poll, the landing pose, the reconciled
-    # list, the max-health attribute round-trip. SRG anchors are
-    # load-bearing throughout: ()I, ()F and (F)V each name several Entity
-    # / EntityLivingBase members (measured: getEntityId shares ()I with
-    # five others, getMaxHealth shares ()F with seven), so the anchor
-    # picks the intended one. Anchors are tsrg-measured, never recalled:
-    # the first spawn run died census-blind because getEntityId was
-    # anchored func_82145_z from memory — notch Z() returns constant 1
-    # (measured via javap -c), every landing recorded under one id, the
-    # cap veto blind, breach at worldTick 6. The id getter is the method
-    # returning the ctor-counter field equals/hashCode use (measured via
-    # javap -c: obf S), i.e. func_145782_y.
-    ("net/minecraft/entity/Entity", "getEntityId", "()I", "method", False, "func_145782_y"),
-    ("net/minecraft/entity/Entity", "isDead", "Z", "field", False, "field_70128_L"),
-    ("net/minecraft/world/World", "loadedEntityList", "Ljava/util/List;", "field", False, "field_72996_f"),
-    ("net/minecraft/entity/Entity", "setPositionAndRotation", "(DDDFF)V", "method", False, "func_70080_a"),
-    ("net/minecraft/entity/EntityLivingBase", "getEntityAttribute", "(Lnet/minecraft/entity/ai/attributes/IAttribute;)Lnet/minecraft/entity/ai/attributes/IAttributeInstance;", "method", False, "func_110148_a"),
-    ("net/minecraft/entity/EntityLivingBase", "getMaxHealth", "()F", "method", False, "func_110138_aP"),
-    ("net/minecraft/entity/EntityLivingBase", "setHealth", "(F)V", "method", False, "func_70606_j"),
-    ("net/minecraft/entity/ai/attributes/IAttributeInstance", "setBaseValue", "(D)V", "method", False, "func_111128_a"),
-    ("net/minecraft/entity/SharedMonsterAttributes", "maxHealth", "Lnet/minecraft/entity/ai/attributes/IAttribute;", "field", True, "field_111267_a"),
-    # Item registration tranche (hub decisions/ITEM_REGISTRATION.md):
-    ("net/minecraft/item/Item", "setMaxStackSize", "(I)Lnet/minecraft/item/Item;", "method", False, "func_77656_e"),
-    ("net/minecraft/item/Item", "setUnlocalizedName", "(Ljava/lang/String;)Lnet/minecraft/item/Item;", "method", False, "func_77655_b"),
-    ("net/minecraft/item/Item", "getIdFromItem", "(Lnet/minecraft/item/Item;)I", "method", True, "func_150891_b"),
-    ("net/minecraft/item/Item", "getByNameOrId", "(Ljava/lang/String;)Lnet/minecraft/item/Item;", "method", True, "func_111206_d"),
-    # Renderer tranche (hub decisions/MATOU_MODEL.md, visual proof): every
-    # net/minecraft/* member the client-only InstancedMeshRenderer touches
-    # (Entity rows verify against the server jar like every row above,
-    # client-class rows against the pinned client jar — the per-row rule
-    # at the javap call sites). The getMinecraft anchor rides the
-    # companion pin (tools/autoplay/want.txt, same joined.tsrg) and this
-    # derive re-verifies it — never recalled. Found live 2026-09-11: the
-    # first RenderWorldLastEvent crashed the client (NoSuchMethodError
-    # getMinecraft) because the map covered server refs only. world is
-    # the single WorldClient-typed field (field_71441_e — field_71439_g
-    # is the player and field_71438_f the renderGlobal, both misread
-    # from memory first; stable-39 fields.csv corroborates) and
-    # getRenderViewEntity is func_175606_aa (all measured via javap on
-    # the pinned client bytes, never recalled).
-    ("net/minecraft/client/Minecraft", "getMinecraft", "()Lnet/minecraft/client/Minecraft;", "method", True, "func_71410_x"),
-    ("net/minecraft/client/Minecraft", "world", "Lnet/minecraft/client/multiplayer/WorldClient;", "field", False, "field_71441_e"),
-    ("net/minecraft/client/Minecraft", "getRenderViewEntity", "()Lnet/minecraft/entity/Entity;", "method", False, "func_175606_aa"),
-    ("net/minecraft/entity/Entity", "lastTickPosX", "D", "field", False, "field_70142_S"),
-    ("net/minecraft/entity/Entity", "lastTickPosY", "D", "field", False, "field_70137_T"),
-    ("net/minecraft/entity/Entity", "lastTickPosZ", "D", "field", False, "field_70136_U"),
-    ("net/minecraft/entity/Entity", "rotationYaw", "F", "field", False, "field_70177_z"),
-    ("net/minecraft/entity/Entity", "rotationPitch", "F", "field", False, "field_70125_A"),
-]
-srg2obf, classes = {}, {}
-cur = None
-for raw in tsrg.splitlines():
-    line = raw.strip()
-    if not line or line.startswith("#"):
-        continue
-    if raw[0] in (" ", "\t"):
-        classes.setdefault(cur, []).append(line.split())
-    else:
-        obf, srg = line.split()
-        srg2obf[srg] = obf
-        cur = srg
-
-def obf_desc(d):
-    return re.sub(r"L([^;]+);",
-                  lambda m: "L" + srg2obf.get(m.group(1), m.group(1)) + ";", d)
-
-# javap spells primitive field types by name (double, boolean, ...), never
-# by descriptor char — the loot tranche pins Entity/posX (D) and
-# World/isRemote (Z), so the field-type key maps single-char descriptors
-# (object types keep the obf_desc path above). Unobfuscated packages keep
-# their dots in javap (java.util.List) while SRG descriptors use slashes,
-# so object types normalize to dots — same replace as hub
-# tools/run-client.sh (the notch jar spells the obf class with no
-# separator at all, so one replace covers both; obf names never contain a
-# slash-or-dot). The spawn tranche needs it for World/loadedEntityList.
-PRIM = {"Z": "boolean", "B": "byte", "C": "char", "D": "double",
-        "F": "float", "I": "int", "J": "long", "S": "short"}
-
-def obf_ftype(d):
-    if d in PRIM:
-        return PRIM[d]
-    return obf_desc(d)[1:-1].replace("/", ".")
-
-def javap_flags(cls, jar):
-    # -> {(name, descriptor-or-F:type): is_static} from the notch jar
-    # holding the class (server jar, or the pinned client jar for
-    # net/minecraft/client/* — chosen per row below, never defaulted).
-    out = subprocess.check_output([javap, "-p", "-s", "-cp", jar, cls]).decode()
-    res, name, static = {}, None, False
-    for l in out.splitlines():
-        s = l.strip()
-        if s.startswith("descriptor:"):
-            res[(name, s.split(None, 1)[1])] = static
-        elif s and not s.startswith("Compiled"):
-            m = re.match(r".*\s([\w$<>]+)\(", s)
-            if m:
-                static = bool(re.search(r"\bstatic\b", s.split("(")[0]))
-                name = m.group(1)
-            elif "(" not in s and s.endswith(";") and "{" not in s:
-                # Field type class carries ? and & too: the client jar's
-                # Minecraft spells Queue<FutureTask<?>> with wildcard
-                # bounds (same fix as the hub run-client.sh autoplay
-                # derive, C3 proof).
-                m2 = re.match(r"(?:(.*)\s)?([\w.$\[\]<>, ?&]+?)\s+([\w$]+);", s)
-                assert m2, "E_SRG_DERIVE:unparsed javap line <%s> in <%s>" % (s, cls)
-                static = bool(re.search(r"\bstatic\b", m2.group(1) or ""))
-                name = m2.group(3)
-                res[(name, "F:" + re.sub(r"<.*>", "", m2.group(2)))] = static
-    return res
-
-lines = []
-for row in WANT:
-    owner, mcp, desc, kind, want_static = row[:5]
-    anchor = row[5] if len(row) > 5 else None
-    # Client classes live in the client jar only — every other owner in
-    # the server jar. No default: a future package outside both fails at
-    # javap loudly (check_output raises), never maps against the wrong
-    # bytes silently. Only net/minecraft/client/* exists there today.
-    jar = client if owner.startswith("net/minecraft/client/") else server
-    obf_owner = srg2obf[owner]
-    members = classes[owner]
-    if kind == "method":
-        od = obf_desc(desc)
-        cands = [(m[0], m[2]) for m in members if len(m) == 3 and m[1] == od]
-        if anchor is not None:
-            cands = [(n, s) for n, s in cands if s == anchor]
-        assert cands, "E_SRG_DERIVE:no tsrg member <%s %s>" % (owner, mcp)
-        flags = javap_flags(obf_owner, jar)
-        hits = [(n, s) for n, s in cands if flags.get((n, od)) == want_static]
-        assert len(hits) == 1, "E_SRG_DERIVE:ambiguous <%s %s> %s" % (owner, mcp, hits)
-        lines.append("MD: %s/%s %s %s/%s %s" % (owner, hits[0][1], desc, owner, mcp, desc))
-    else:
-        if anchor is not None:
-            found = [m for m in members if len(m) == 2 and m[1] == anchor]
-            assert len(found) == 1, "E_SRG_DERIVE:no tsrg field <%s %s>" % (owner, anchor)
-            ftype_obf = obf_ftype(desc)
-            flags = javap_flags(obf_owner, jar)
-            assert flags.get((found[0][0], "F:" + ftype_obf)) == want_static, \
-                "E_SRG_DERIVE:field shape <%s %s>" % (owner, anchor)
-            lines.append("FD: %s/%s %s/%s" % (owner, anchor, owner, mcp))
-            continue
-        ftype_obf = obf_ftype(desc)
-        flags = javap_flags(obf_owner, jar)
-        flds = [n for (n, d), st in flags.items()
-                if d == "F:" + ftype_obf and st == want_static]
-        assert len(flds) == 1, "E_SRG_DERIVE:ambiguous field <%s %s> %s" % (owner, mcp, flds)
-        hits = [m for m in members if len(m) == 2 and m[0] == flds[0]]
-        assert len(hits) == 1, "E_SRG_DERIVE:no tsrg field <%s %s>" % (owner, mcp)
-        lines.append("FD: %s/%s %s/%s" % (owner, hits[0][1], owner, mcp))
-assert len(lines) == 42, "E_SRG_DERIVE:want 42 lines, got %d" % len(lines)
-open(outpath, "w").write("\n".join(lines) + "\n")
-print("ok c3-live : narrow SRG derived (%d lines)" % len(lines))
-EOF
+# Mechanics live in hub/tools/live-derive.sh (era 1.12), rows in
+# tools/live/want.tsv — same 42 lines, byte-identical output.
 SRG_NARROW="$C3_DIR/srg-narrow.srg"
+live_derive_mcp_anchor "$C3_DIR/mcp_config-1.12.2.zip" "$MCSERV" "$J8/javap" "$SRG_NARROW" "$MCCLIENT" "tools/live/want.tsv"
 # 2b. Pin every derived line: a derivation the SRG does not confirm is a loud
 #     failure, never a silent default. getDimension stays unmapped by design.
-pin_method() {
-  grep -q "^MD: [^ ]* [^ ]* $1 $2\$" "$SRG_NARROW" \
-    || { echo "FAIL c3-live : stub member unpinned <$1 $2>"; exit 1; }
-}
-pin_field() {
-  grep -q "^FD: [^ ]* $1\$" "$SRG_NARROW" \
-    || { echo "FAIL c3-live : stub field unpinned <$1>"; exit 1; }
-}
 pin_method "net/minecraft/block/Block/getBlockFromName" "(Ljava/lang/String;)Lnet/minecraft/block/Block;"
 pin_method "net/minecraft/block/Block/getDefaultState" "()Lnet/minecraft/block/state/IBlockState;"
 pin_method "net/minecraft/world/World/setBlockState" "(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z"
@@ -433,10 +226,6 @@ echo "ok c3-live : stubs pinned to derived SRG"
 #     Forge classes are never obfuscated, so names are final — presence is
 #     the pin. (Vanilla-typed Forge members reference notch classes in
 #     the universal, which is why forge/ compiles against stubs, not it.)
-pin_uni() {
-  "$J8/javap" -p -cp "$UNI" "$1" 2>/dev/null | grep -q "$2" \
-    || { echo "FAIL c3-live : universal pin unmet <$1 :: $2>"; exit 1; }
-}
 pin_uni 'net.minecraftforge.fml.common.gameevent.TickEvent$WorldTickEvent' 'world'
 pin_uni 'net.minecraftforge.fml.common.gameevent.TickEvent$ClientTickEvent' 'ClientTickEvent('
 pin_uni 'net.minecraftforge.fml.common.gameevent.TickEvent$ServerTickEvent' 'ServerTickEvent('
@@ -530,37 +319,6 @@ cat > "$BLD/mcmod.info" <<EOF
 [{"modid": "matoubridge", "name": "MatouBridge", "description": "SPI bridge for Minecraft 1.12.2 (reobfuscated SRG).", "version": "$VERSION", "mcversion": "1.12.2", "authorList": ["matou-dev"], "url": "https://github.com/matou-dev/bridge-1122"}, {"modid": "example1", "name": "MatouExample1", "description": "Example1 content: registers example1 blocks (registry event) + the generic beast for the bridge wire.", "version": "$VERSION", "mcversion": "1.12.2", "authorList": ["matou-dev"], "url": "https://github.com/matou-dev/example1"}]
 EOF
 find "$BLD/spi" "$BLD/ex1" "$BLD/mini" "$BLD/forge" "$BLD/MANIFEST.MF" "$BLD/mcmod.info" -exec touch -h -d "@$EPOCH" {} +
-# mkjar: sorted entries, pinned mtimes, VERSION manifest. File lists stay
-# explicit because jar -C . walks in readdir order (not reproducible).
-# normjar then clamps every zip entry timestamp: the JDK 8 jar tool stamps
-# META-INF entries with the wall clock (verified by diff), and Reobf does
-# the same for its output. python3 is already a hard dependency (anvil).
-# Scope: same commit + same toolchain == same bytes (zlib/JDK may vary
-# across machines; use tools/live/Dockerfile to pin the toolchain).
-normjar() {
-  python3 - "$1" "$EPOCH" <<'EOF'
-import sys, zipfile, datetime
-path, epoch = sys.argv[1], int(sys.argv[2])
-dt = datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).timetuple()[:6]
-zin = zipfile.ZipFile(path)
-items = [(i, zin.read(i.filename)) for i in zin.infolist()]
-zin.close()
-zout = zipfile.ZipFile(path + ".norm", "w", zipfile.ZIP_DEFLATED)
-for info, data in items:
-    info.date_time = dt
-    info.create_system = 0
-    zout.writestr(info, data)
-zout.close()
-EOF
-  mv "$1.norm" "$1"
-}
-mkjar() {
-  out="$1"; stage="$2"
-  files=$(cd "$stage" && find . -type f | LC_ALL=C sort)
-  # Controlled tree, no spaces in class paths: word-splitting is intended.
-  (cd "$stage" && "$J8/jar" cfm "$out" "$BLD/MANIFEST.MF" $files)
-  normjar "$out"
-}
 mkjar "$BLD/jars/matou-spi.jar" "$BLD/spi"
 mkjar "$BLD/jars/matou-example1.jar" "$BLD/ex1"
 mkjar "$BLD/jars/matou-minimap.jar" "$BLD/mini"
@@ -752,12 +510,7 @@ cp tools/live/my_beast.geo.json "$SERV/config/matoubridge/my_beast.geo.json"
 echo "eula=true" > "$SERV/eula.txt"
 printf 'online-mode=false\nlevel-type=FLAT\ngamemode=1\ndifficulty=0\nmotd=C3 live proof\nmax-tick-time=-1\n' > "$SERV/server.properties"
 rm -rf "$SERV/world" "$SERV/logs"
-set +e
-(cd "$SERV" && timeout "$BOOT_SECS" "$J8/java" -Xmx1G -jar "$UNI" nogui < /dev/null > boot-c3.log 2>&1)
-code=$?
-set -e
-[ "$code" -eq 124 ] || { echo "FAIL c3-live : server exited early (code $code, see $SERV/boot-c3.log)"; exit 1; }
-echo "ok c3-live : server ran ($BOOT_SECS s)"
+live_boot "$SERV" "$BOOT_SECS" "boot-c3.log" "$J8/java" -Xmx1G -jar "$UNI" nogui
 
 # 6. Fail loudly on any runtime refusal or linkage error (stdout log plus
 #    the rolling server log — FML splits output across both). E_MODEL rides
@@ -766,14 +519,7 @@ echo "ok c3-live : server ran ($BOOT_SECS s)"
 #    decisions/MATOU_MODEL.md, server half of the live proof).
 LOGS="$SERV/boot-c3.log"
 [ -f "$SERV/logs/latest.log" ] && LOGS="$LOGS $SERV/logs/latest.log"
-if grep -a -q "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|Encountered an unexpected exception" $LOGS; then
-  echo "FAIL c3-live : runtime refusal (see $SERV/boot-c3.log)"
-  grep -a -m5 "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|Caused by" $LOGS
-  exit 1
-fi
-grep -a -q "matoubridge" $LOGS \
-  || { echo "FAIL c3-live : mod never loaded"; exit 1; }
-echo "ok c3-live : bind clean, ticks clean"
+live_verdict "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|Encountered an unexpected exception" "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|Caused by" $LOGS
 
 # 7. Positive proof: world blocks in chunks (0..1, -1..1) at y=60..61
 #    plus y=63..65 must equal the pure decision union — nothing foreign,
@@ -797,67 +543,5 @@ echo "ok c3-live : my_ore id $ORE_ID (dynamic, from boot log)"
 ITEM_ID=$(grep -a -o '\[MatouBridge\] registered-item <example1:my_gem> id [0-9][0-9]*' "$SERV/boot-c3.log" | tail -n 1 | grep -a -o '[0-9][0-9]*$' || true)
 [ -n "$ITEM_ID" ] || { echo "FAIL c3-live : my_gem registration line absent from boot log (registry event never registered? see $SERV/boot-c3.log)"; exit 1; }
 echo "ok c3-live : my_gem id $ITEM_ID (dynamic, from boot log)"
-: > "$BLD/world.txt"
-for spec in "r.0.0.mca 0 0" "r.0.0.mca 1 0" "r.0.0.mca 0 1" \
-    "r.0.0.mca 1 1" "r.0.-1.mca 0 -1" "r.0.-1.mca 1 -1"; do
-  set -- $spec
-  for y in 60 61 63 64 65; do
-    python3 tools/live/anvil.py "$SERV/world/region/$1" "$2" "$3" "$y" \
-      | awk -v cx="$2" -v cz="$3" -v y="$y" \
-        '{split($1, a, ","); print (cx*16+a[1])" "y" "(cz*16+a[2])" "$2}' \
-      >> "$BLD/world.txt"
-  done
-done
-python3 - "$BLD/union.txt" "$BLD/world.txt" "$SERV/config/matoubridge/packs.cfg" "minecraft:stone=1,example1:my_ore=$ORE_ID" <<'EOF'
-import sys
-# Block names resolve to numeric IDs through the argv table (frozen
-# vanilla IDs plus the dynamic custom IDs the shell resolved from the
-# boot log) — never hardcoded, never guessed. A world name outside the
-# table fails loudly (extend the table explicitly).
-table = {}
-for pair in sys.argv[4].split(","):
-    name, num = pair.split("=", 1)
-    table[name] = num
-wire_y, wire_block = None, None
-for line in open(sys.argv[3]):
-    line = line.strip()
-    if line and not line.startswith("#"):
-        toks = line.split()
-        wire_y, wire_block = int(toks[1]), toks[2]
-if wire_y is None:
-    print("FAIL c3-live : no wire in packs.cfg")
-    sys.exit(1)
-if wire_block not in table:
-    print("FAIL c3-live : no numeric ID for wire block <%s>" % wire_block)
-    sys.exit(1)
-u = {}
-for line in open(sys.argv[1]):
-    cell = line.split()[0]
-    parts = cell.split(",")
-    if len(parts) == 3 and ":" in parts[2]:
-        z, bname = parts[2].split(":", 1)
-        pos = (int(parts[0]), int(parts[1]), int(z))
-    else:
-        x, z = cell.split(",")
-        pos, bname = (int(x), wire_y, int(z)), wire_block
-    if bname not in table:
-        print("FAIL c3-live : no numeric ID for block <%s> (extend the table, never guess)" % bname)
-        sys.exit(1)
-    u[pos] = table[bname]
-rows = [l.split() for l in open(sys.argv[2])]
-w = {(int(x), int(y), int(z)): i for x, y, z, i in rows}
-if not w:
-    print("FAIL c3-live : world empty at y=60..61,63..65 (no tick applied?)")
-    sys.exit(1)
-if set(w.values()) - set(table.values()):
-    print("FAIL c3-live : foreign block ids %s" % sorted(set(w.values()) - set(table.values())))
-    sys.exit(1)
-bad = {p: (w[p], u.get(p)) for p in w if u.get(p) != w[p]}
-if bad:
-    print("FAIL c3-live : id mismatch at %s (want pure union ids)" % sorted(bad.items())[:5])
-    sys.exit(1)
-if u.keys() - w.keys():
-    print("FAIL c3-live : pure cells missing from world (%d)" % len(u.keys() - w.keys()))
-    sys.exit(1)
-print("ok c3-live : world == pure union (%d cells, ids %s)" % (len(w), sorted(set(w.values()))))
-EOF
+live_anvil_loop "$SERV" "$BLD"
+live_compare_ids "$BLD/union.txt" "$BLD/world.txt" "$SERV/config/matoubridge/packs.cfg" "minecraft:stone=1,example1:my_ore=$ORE_ID"
