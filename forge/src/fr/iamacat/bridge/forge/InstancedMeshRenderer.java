@@ -10,6 +10,7 @@ import java.nio.FloatBuffer;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
+import net.minecraft.world.World;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -187,7 +188,13 @@ public final class InstancedMeshRenderer {
             return;
         }
 
-        List<Entity> list = mc.world.loadedEntityList;
+        // Owner discipline (hub decisions/LOOT.md): the world field is
+        // WorldClient-typed but loadedEntityList is declared on World —
+        // read it through the declaring type so Reobf maps the ref (a
+        // WorldClient-owned ref walks nowhere: stubs never ship, the
+        // chain ends, the name passes through and dies linking live).
+        World clientWorld = mc.world;
+        List<Entity> list = clientWorld.loadedEntityList;
         if (list == null || list.isEmpty()) {
             return;
         }
