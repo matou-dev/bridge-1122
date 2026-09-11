@@ -19,6 +19,12 @@ public class GL11 {
     public static int GL_BLEND;
     public static int GL_SRC_ALPHA;
     public static int GL_ONE_MINUS_SRC_ALPHA;
+    // Measured on the provisioned 2.9.4-nightly-20150209 bytes (javap:
+    // public static int glGetError(), GL_NO_ERROR) — the draw-proof
+    // tripwire in InstancedMeshRenderer judges its own draw, never MC's.
+    public static int GL_NO_ERROR;
+
+    public static int glGetError() { return 0; }
 
     public static void glEnable(int cap) {}
     public static void glDisable(int cap) {}

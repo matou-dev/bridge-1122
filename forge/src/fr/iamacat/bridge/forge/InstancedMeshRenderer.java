@@ -68,6 +68,7 @@ public final class InstancedMeshRenderer {
 
     private final GlBackend backend;
     private boolean initialized;
+    private boolean drawLogged;
     private int program;
     private int vao;
     private int meshVbo;
@@ -166,6 +167,9 @@ public final class InstancedMeshRenderer {
         backend.bindVertexArray(0);
         backend.bindBuffer(GlBackend.GL_ARRAY_BUFFER, 0);
         initialized = true;
+        System.out.println("[MatouRenderer] ready mesh=" + vertexCount
+                + " verts stride=" + MatouModel.VERTEX_STRIDE
+                + " program=" + program);
     }
 
     @SubscribeEvent
@@ -245,7 +249,24 @@ public final class InstancedMeshRenderer {
         backend.uniformMatrix4fv(uViewLoc, false, viewMatrixBuffer);
 
         backend.bindVertexArray(vao);
+        // Draw-proof discipline (hub decisions/MATOU_MODEL.md, visual
+        // tranche): pre-existing GL errors belong to the shared context
+        // (MC's own state may carry some) — drain them so only this draw
+        // is judged, then refuse loudly if GL rejects it. A rejected draw
+        // that still logged "drew" would be a silent pass.
+        while (GL11.glGetError() != GL11.GL_NO_ERROR) {
+        }
         backend.drawArraysInstanced(GlBackend.GL_TRIANGLES, 0, vertexCount, count);
+        int glErr = GL11.glGetError();
+        if (glErr != GL11.GL_NO_ERROR) {
+            throw new IllegalStateException("E_GL_DRAW:failed <" + glErr
+                    + "> (instanced beast draw rejected — see hub decisions/GL_INSTANCING_ADAPTER.md)");
+        }
+        if (!drawLogged) {
+            drawLogged = true;
+            System.out.println("[MatouRenderer] drew instances=" + count
+                    + " mesh=" + vertexCount + " verts");
+        }
 
         backend.bindVertexArray(0);
         backend.useProgram(0);
