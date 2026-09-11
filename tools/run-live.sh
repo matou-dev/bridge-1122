@@ -461,7 +461,7 @@ normjar() {
   python3 - "$1" "$EPOCH" <<'EOF'
 import sys, zipfile, datetime
 path, epoch = sys.argv[1], int(sys.argv[2])
-dt = datetime.datetime.utcfromtimestamp(epoch).timetuple()[:6]
+dt = datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).timetuple()[:6]
 zin = zipfile.ZipFile(path)
 items = [(i, zin.read(i.filename)) for i in zin.infolist()]
 zin.close()
@@ -566,7 +566,7 @@ echo "eula=true" > "$SERV/eula.txt"
 printf 'online-mode=false\nlevel-type=FLAT\ngamemode=1\ndifficulty=0\nmotd=C3 live proof\nmax-tick-time=-1\n' > "$SERV/server.properties"
 rm -rf "$SERV/world" "$SERV/logs"
 set +e
-(cd "$SERV" && timeout "$BOOT_SECS" "$J8/java" -Xmx1G -jar "$UNI" nogui > boot-c3.log 2>&1)
+(cd "$SERV" && timeout "$BOOT_SECS" "$J8/java" -Xmx1G -jar "$UNI" nogui < /dev/null > boot-c3.log 2>&1)
 code=$?
 set -e
 [ "$code" -eq 124 ] || { echo "FAIL c3-live : server exited early (code $code, see $SERV/boot-c3.log)"; exit 1; }
