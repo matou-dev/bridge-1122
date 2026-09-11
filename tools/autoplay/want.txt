@@ -45,4 +45,4 @@ F net/minecraft/entity/Entity world field_70170_p Lnet/minecraft/world/World; 0
 F net/minecraft/entity/Entity posX field_70165_t D 0
 F net/minecraft/entity/Entity posY field_70163_u D 0
 F net/minecraft/entity/Entity posZ field_70161_v D 0
-F net/minecraft/init/Items diamond field_151045_i Lnet/minecraft/item/Item; 1
+M net/minecraft/item/Item getByNameOrId func_111206_d (Ljava/lang/String;)Lnet/minecraft/item/Item; 1

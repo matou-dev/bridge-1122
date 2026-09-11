@@ -35,7 +35,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.SharedMonsterAttributes;
 import net.minecraft.entity.item.EntityItem;
-import net.minecraft.init.Items;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.World;
@@ -319,9 +319,11 @@ public final class MatouBridgeMod {
         System.out.println("[MatouBridge] loot wired <" + lootTable
                 + "> count <" + lootCount + "> ore <" + oreNames + ">"
                 + lootNote);
-        if (Items.diamond == null) {
-            throw new IllegalArgumentException(
-                    "E_LOOT_GEM:unknown <minecraft:diamond>");
+        for (String dropRef : lootTable.values()) {
+            if (resolveItem(dropRef) == null) {
+                throw new IllegalArgumentException("E_LOOT_ITEM:unknown <"
+                        + dropRef + ">");
+            }
         }
     }
 
@@ -735,7 +737,7 @@ public final class MatouBridgeMod {
         List<String> due = loot.decide(snap);
         for (String cell : due) {
             ForgeCells.BlockCell vol = ForgeCells.parseBlockCell(cell);
-            dropCarrier(world, vol.x, vol.y, vol.z);
+            dropCarrier(world, vol.x, vol.y, vol.z, vol.block);
         }
         if (!due.isEmpty()) {
             System.out.println("[MatouBridge] loot dropped "
@@ -767,16 +769,45 @@ public final class MatouBridgeMod {
     }
 
     /**
-     * Loot landing: one vanilla-diamond carrier per due drop, beside the
+     * Loot landing: one registered-item carrier per due drop, beside the
      * vanilla drops (never replacing them). A refused spawn fails loudly
      * — a lost carrier is loot lost silently otherwise.
      */
-    private void dropCarrier(World world, int x, int y, int z) {
+    private void dropCarrier(World world, int x, int y, int z, String itemRef) {
+        Item item = resolveItem(itemRef);
+        if (item == null) {
+            throw new IllegalStateException("E_LOOT_ITEM:unknown <" + itemRef + ">");
+        }
         EntityItem carrier = new EntityItem(world, x + 0.5, y + 0.5,
-                z + 0.5, new ItemStack(Items.diamond, 1));
+                z + 0.5, new ItemStack(item, 1));
         if (!world.spawnEntity(carrier)) {
             throw new IllegalStateException("E_LOOT_SPAWN:refused <" + x
                     + "," + y + "," + z + ">");
         }
+    }
+
+    static Item resolveItem(String ref) {
+        if (ref == null || ref.isEmpty()) {
+            return null;
+        }
+        int colon = ref.indexOf(':');
+        if (colon < 0) {
+            return Item.getByNameOrId("example1:" + ref);
+        }
+        Item item = Item.getByNameOrId(ref);
+        if (item != null) {
+            return item;
+        }
+        String prefix = ref.substring(0, colon);
+        String name = ref.substring(colon + 1);
+        int dot = prefix.indexOf('.');
+        if (dot > 0) {
+            String modId = prefix.substring(0, dot);
+            item = Item.getByNameOrId(modId + ":" + name);
+            if (item != null) {
+                return item;
+            }
+        }
+        return null;
     }
 }

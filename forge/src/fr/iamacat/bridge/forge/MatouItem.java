@@ -1,15 +1,15 @@
 package fr.iamacat.bridge.forge;
 
+import net.minecraft.item.Item;
+
 /**
- * Tranche-1 parity shell (see hub decisions/ITEM_REGISTRATION.md):
- * same basename as bridge-1710's generic MatouItem so hub
- * tools/check-bridges.sh holds its forge file-set. Never referenced by
- * this bridge's mod (no preInit registration yet) — this bridge's own
- * registration tranche rewrites it version-native and live-proves it.
- * Zero MC imports by design: compiles anywhere, ships nothing.
+ * Generic item (1.12.2): drives item registration from content {@code ItemSpec}
+ * (short name, stack size) parsed once in preInit. Pure, zero content literals
+ * here — {@link Example1Mod} instances it from reflective specs.
  */
-public final class MatouItem {
-    private MatouItem() {
-        throw new AssertionError("E_REG_SHELL:unwired parity shell");
+public final class MatouItem extends Item {
+    public MatouItem(String shortName, int stackSize) {
+        setUnlocalizedName(shortName);
+        setMaxStackSize(stackSize);
     }
 }

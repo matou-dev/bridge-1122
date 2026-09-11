@@ -208,6 +208,11 @@ WANT = [
     ("net/minecraft/entity/EntityLivingBase", "setHealth", "(F)V", "method", False, "func_70606_j"),
     ("net/minecraft/entity/ai/attributes/IAttributeInstance", "setBaseValue", "(D)V", "method", False, "func_111128_a"),
     ("net/minecraft/entity/SharedMonsterAttributes", "maxHealth", "Lnet/minecraft/entity/ai/attributes/IAttribute;", "field", True, "field_111267_a"),
+    # Item registration tranche (hub decisions/ITEM_REGISTRATION.md):
+    ("net/minecraft/item/Item", "setMaxStackSize", "(I)Lnet/minecraft/item/Item;", "method", False, "func_77656_e"),
+    ("net/minecraft/item/Item", "setUnlocalizedName", "(Ljava/lang/String;)Lnet/minecraft/item/Item;", "method", False, "func_77655_b"),
+    ("net/minecraft/item/Item", "getIdFromItem", "(Lnet/minecraft/item/Item;)I", "method", True, "func_150891_b"),
+    ("net/minecraft/item/Item", "getByNameOrId", "(Ljava/lang/String;)Lnet/minecraft/item/Item;", "method", True, "func_111206_d"),
 ]
 srg2obf, classes = {}, {}
 cur = None
@@ -298,7 +303,7 @@ for row in WANT:
         hits = [m for m in members if len(m) == 2 and m[0] == flds[0]]
         assert len(hits) == 1, "E_SRG_DERIVE:no tsrg field <%s %s>" % (owner, mcp)
         lines.append("FD: %s/%s %s/%s" % (owner, hits[0][1], owner, mcp))
-assert len(lines) == 30, "E_SRG_DERIVE:want 30 lines, got %d" % len(lines)
+assert len(lines) == 34, "E_SRG_DERIVE:want 34 lines, got %d" % len(lines)
 open(outpath, "w").write("\n".join(lines) + "\n")
 print("ok c3-live : narrow SRG derived (%d lines)" % len(lines))
 EOF
@@ -343,10 +348,14 @@ pin_method "net/minecraft/entity/EntityLivingBase/getMaxHealth" "()F"
 pin_method "net/minecraft/entity/EntityLivingBase/setHealth" "(F)V"
 pin_method "net/minecraft/entity/ai/attributes/IAttributeInstance/setBaseValue" "(D)V"
 pin_field "net/minecraft/entity/SharedMonsterAttributes/maxHealth"
+pin_method "net/minecraft/item/Item/setMaxStackSize" "(I)Lnet/minecraft/item/Item;"
+pin_method "net/minecraft/item/Item/setUnlocalizedName" "(Ljava/lang/String;)Lnet/minecraft/item/Item;"
+pin_method "net/minecraft/item/Item/getIdFromItem" "(Lnet/minecraft/item/Item;)I"
+pin_method "net/minecraft/item/Item/getByNameOrId" "(Ljava/lang/String;)Lnet/minecraft/item/Item;"
 grep -q "getDimension" "$SRG_NARROW" \
   && { echo "FAIL c3-live : getDimension must stay unmapped (Forge-added, runtime-final)"; exit 1; }
-[ "$(grep -c . "$SRG_NARROW")" = "30" ] \
-  || { echo "FAIL c3-live : narrow map drift (want 30 lines)"; exit 1; }
+[ "$(grep -c . "$SRG_NARROW")" = "34" ] \
+  || { echo "FAIL c3-live : narrow map drift (want 34 lines)"; exit 1; }
 echo "ok c3-live : stubs pinned to derived SRG"
 
 # 2c. Pin every stubbed Forge member against the provisioned 2860 universal.
@@ -604,6 +613,9 @@ echo "ok c3-live : bind clean, ticks clean"
 ORE_ID=$(grep -a -o '\[MatouBridge\] registered <example1:my_ore> id [0-9][0-9]*' "$SERV/boot-c3.log" | tail -n 1 | grep -a -o '[0-9][0-9]*$' || true)
 [ -n "$ORE_ID" ] || { echo "FAIL c3-live : my_ore registration line absent from boot log (registry event never registered? see $SERV/boot-c3.log)"; exit 1; }
 echo "ok c3-live : my_ore id $ORE_ID (dynamic, from boot log)"
+ITEM_ID=$(grep -a -o '\[MatouBridge\] registered-item <example1:my_gem> id [0-9][0-9]*' "$SERV/boot-c3.log" | tail -n 1 | grep -a -o '[0-9][0-9]*$' || true)
+[ -n "$ITEM_ID" ] || { echo "FAIL c3-live : my_gem registration line absent from boot log (registry event never registered? see $SERV/boot-c3.log)"; exit 1; }
+echo "ok c3-live : my_gem id $ITEM_ID (dynamic, from boot log)"
 : > "$BLD/world.txt"
 for spec in "r.0.0.mca 0 0" "r.0.0.mca 1 0" "r.0.0.mca 0 1" \
     "r.0.0.mca 1 1" "r.0.-1.mca 0 -1" "r.0.-1.mca 1 -1"; do
