@@ -550,8 +550,9 @@ if [ "${BUILD_ONLY:-}" = "1" ]; then
   cp "$BLD/jars/matou-minimap.jar" "dist/matou-minimap-$VERSION.jar"
   cp "$BLD/jars/matoubridge-reobf.jar" "dist/matoubridge-$VERSION.jar"
   cp ../example1/content/owned.matou ../example1/content/additive.matou ../example1/content/structure.matou ../example1/content/vein.matou dist/matou-content/
+  cp tools/live/my_beast.geo.json dist/my_beast.geo.json
   printf '# Copy to <server>/config/matoubridge/packs.cfg and replace <SERVER>.\n# Wire y=63 keeps plane cells on their own slice, off the structure slices (64..65).\n# The wire block is the registered custom ore (registry event registers example1:my_ore from owned.matou); aliases stay vanilla stone.\n# Vein clusters land on the BASE_Y=60 band (slices 60..61) as the registered ore via the veinblock alias.\nfr.iamacat.example1.ExamplePack 63 example1:my_ore ownedFile=<SERVER>/matou-content/owned.matou scatterFile=<SERVER>/matou-content/additive.matou structureFile=<SERVER>/matou-content/structure.matou block.example1.structures:hut_wall=minecraft:stone block.example1.structures:hut_roof=minecraft:stone veinFile=<SERVER>/matou-content/vein.matou veinblock.example1.content:my_ore=example1:my_ore\n' > dist/packs.cfg.example
-  (cd dist && sha256sum "matou-spi-$VERSION.jar" "matou-example1-$VERSION.jar" "matou-minimap-$VERSION.jar" "matoubridge-$VERSION.jar" matou-content/owned.matou matou-content/additive.matou matou-content/structure.matou matou-content/vein.matou packs.cfg.example > SHA256SUMS.txt)
+  (cd dist && sha256sum "matou-spi-$VERSION.jar" "matou-example1-$VERSION.jar" "matou-minimap-$VERSION.jar" "matoubridge-$VERSION.jar" matou-content/owned.matou matou-content/additive.matou matou-content/structure.matou matou-content/vein.matou packs.cfg.example my_beast.geo.json > SHA256SUMS.txt)
   (cd dist && sha256sum -c SHA256SUMS.txt)
   echo "ok r2-release : dist/ assembled (VERSION=$VERSION)"
   exit 0
@@ -571,6 +572,10 @@ rm -rf "$SERV/matou-content" && cp -r ../example1/content "$SERV/matou-content"
 # clusters land on their own band (BASE_Y=60, slices 60..61) as the
 # registered ore through the veinblock alias.
 printf 'fr.iamacat.example1.ExamplePack 63 example1:my_ore ownedFile=%s/matou-content/owned.matou scatterFile=%s/matou-content/additive.matou structureFile=%s/matou-content/structure.matou block.example1.structures:hut_wall=minecraft:stone block.example1.structures:hut_roof=minecraft:stone veinFile=%s/matou-content/vein.matou veinblock.example1.content:my_ore=example1:my_ore\n' "$SERV" "$SERV" "$SERV" "$SERV" > "$SERV/config/matoubridge/packs.cfg"
+# Beast shape: the shipped Blockbench geometry the renderer bakes and the
+# hitboxes derive from (hub decisions/MATOU_MODEL.md). Deployed beside
+# packs.cfg, operator-replaceable like it.
+cp tools/live/my_beast.geo.json "$SERV/config/matoubridge/my_beast.geo.json"
 echo "eula=true" > "$SERV/eula.txt"
 printf 'online-mode=false\nlevel-type=FLAT\ngamemode=1\ndifficulty=0\nmotd=C3 live proof\nmax-tick-time=-1\n' > "$SERV/server.properties"
 rm -rf "$SERV/world" "$SERV/logs"

@@ -1,7 +1,9 @@
 package fr.iamacat.bridge.forge;
 
+import fr.iamacat.bridge.model.BeastModel;
 import fr.iamacat.spi.render.GlBackend;
 import fr.iamacat.spi.render.InstanceFormat;
+import fr.iamacat.spi.model.MatouModel;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -18,6 +20,8 @@ import org.lwjgl.opengl.GL11;
 /**
  * Client-only instanced mesh renderer hooked into RenderWorldLastEvent.
  * Renders all visible MatouEntity instances via OpenGL 3.1+ instancing primitives (Lwjgl2Backend).
+ * The static mesh is baked from the shipped {@code my_beast.geo.json}
+ * (hub decisions/MATOU_MODEL.md) — never a hardcoded box again.
  */
 @SideOnly(Side.CLIENT)
 public final class InstancedMeshRenderer {
@@ -62,57 +66,13 @@ public final class InstancedMeshRenderer {
             + "    fragColor = col;\n"
             + "}\n";
 
-    private static final float[] BOX_VERTICES = {
-            // Front face (Z = +0.45, normal = 0, 0, 1)
-            -0.45f, 0.0f,  0.45f,  0.0f, 0.0f,  0.0f, 0.0f, 1.0f,
-             0.45f, 0.0f,  0.45f,  1.0f, 0.0f,  0.0f, 0.0f, 1.0f,
-             0.45f, 0.9f,  0.45f,  1.0f, 1.0f,  0.0f, 0.0f, 1.0f,
-            -0.45f, 0.0f,  0.45f,  0.0f, 0.0f,  0.0f, 0.0f, 1.0f,
-             0.45f, 0.9f,  0.45f,  1.0f, 1.0f,  0.0f, 0.0f, 1.0f,
-            -0.45f, 0.9f,  0.45f,  0.0f, 1.0f,  0.0f, 0.0f, 1.0f,
-            // Back face (Z = -0.45, normal = 0, 0, -1)
-             0.45f, 0.0f, -0.45f,  0.0f, 0.0f,  0.0f, 0.0f, -1.0f,
-            -0.45f, 0.0f, -0.45f,  1.0f, 0.0f,  0.0f, 0.0f, -1.0f,
-            -0.45f, 0.9f, -0.45f,  1.0f, 1.0f,  0.0f, 0.0f, -1.0f,
-             0.45f, 0.0f, -0.45f,  0.0f, 0.0f,  0.0f, 0.0f, -1.0f,
-            -0.45f, 0.9f, -0.45f,  1.0f, 1.0f,  0.0f, 0.0f, -1.0f,
-             0.45f, 0.9f, -0.45f,  0.0f, 1.0f,  0.0f, 0.0f, -1.0f,
-            // Top face (Y = 0.9, normal = 0, 1, 0)
-            -0.45f, 0.9f,  0.45f,  0.0f, 0.0f,  0.0f, 1.0f, 0.0f,
-             0.45f, 0.9f,  0.45f,  1.0f, 0.0f,  0.0f, 1.0f, 0.0f,
-             0.45f, 0.9f, -0.45f,  1.0f, 1.0f,  0.0f, 1.0f, 0.0f,
-            -0.45f, 0.9f,  0.45f,  0.0f, 0.0f,  0.0f, 1.0f, 0.0f,
-             0.45f, 0.9f, -0.45f,  1.0f, 1.0f,  0.0f, 1.0f, 0.0f,
-            -0.45f, 0.9f, -0.45f,  0.0f, 1.0f,  0.0f, 1.0f, 0.0f,
-            // Bottom face (Y = 0.0, normal = 0, -1, 0)
-            -0.45f, 0.0f, -0.45f,  0.0f, 0.0f,  0.0f, -1.0f, 0.0f,
-             0.45f, 0.0f, -0.45f,  1.0f, 0.0f,  0.0f, -1.0f, 0.0f,
-             0.45f, 0.0f,  0.45f,  1.0f, 1.0f,  0.0f, -1.0f, 0.0f,
-            -0.45f, 0.0f, -0.45f,  0.0f, 0.0f,  0.0f, -1.0f, 0.0f,
-             0.45f, 0.0f,  0.45f,  1.0f, 1.0f,  0.0f, -1.0f, 0.0f,
-            -0.45f, 0.0f,  0.45f,  0.0f, 1.0f,  0.0f, -1.0f, 0.0f,
-            // Right face (X = 0.45, normal = 1, 0, 0)
-             0.45f, 0.0f,  0.45f,  0.0f, 0.0f,  1.0f, 0.0f, 0.0f,
-             0.45f, 0.0f, -0.45f,  1.0f, 0.0f,  1.0f, 0.0f, 0.0f,
-             0.45f, 0.9f, -0.45f,  1.0f, 1.0f,  1.0f, 0.0f, 0.0f,
-             0.45f, 0.0f,  0.45f,  0.0f, 0.0f,  1.0f, 0.0f, 0.0f,
-             0.45f, 0.9f, -0.45f,  1.0f, 1.0f,  1.0f, 0.0f, 0.0f,
-             0.45f, 0.9f,  0.45f,  0.0f, 1.0f,  1.0f, 0.0f, 0.0f,
-            // Left face (X = -0.45, normal = -1, 0, 0)
-            -0.45f, 0.0f, -0.45f,  0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
-            -0.45f, 0.0f,  0.45f,  1.0f, 0.0f, -1.0f, 0.0f, 0.0f,
-            -0.45f, 0.9f,  0.45f,  1.0f, 1.0f, -1.0f, 0.0f, 0.0f,
-            -0.45f, 0.0f, -0.45f,  0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
-            -0.45f, 0.9f,  0.45f,  1.0f, 1.0f, -1.0f, 0.0f, 0.0f,
-            -0.45f, 0.9f, -0.45f,  0.0f, 1.0f, -1.0f, 0.0f, 0.0f
-    };
-
     private final GlBackend backend;
     private boolean initialized;
     private int program;
     private int vao;
     private int meshVbo;
     private int instanceVbo;
+    private int vertexCount;
     private int uProjLoc;
     private int uViewLoc;
     private final FloatBuffer viewMatrixBuffer;
@@ -165,12 +125,17 @@ public final class InstancedMeshRenderer {
 
         meshVbo = backend.genBuffers();
         backend.bindBuffer(GlBackend.GL_ARRAY_BUFFER, meshVbo);
-        FloatBuffer meshData = ByteBuffer.allocateDirect(BOX_VERTICES.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
-        meshData.put(BOX_VERTICES);
+        // Model tranche: the static mesh is the SPI bake of the shipped
+        // beast geometry, never a hardcoded box. A missing or broken
+        // model refuses here, loudly, before the first frame.
+        float[] mesh = BeastModel.cached().mesh();
+        vertexCount = mesh.length / MatouModel.VERTEX_STRIDE;
+        FloatBuffer meshData = ByteBuffer.allocateDirect(mesh.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        meshData.put(mesh);
         meshData.flip();
         backend.bufferData(GlBackend.GL_ARRAY_BUFFER, meshData, GlBackend.GL_STATIC_DRAW);
 
-        int meshStride = 8 * 4;
+        int meshStride = MatouModel.VERTEX_STRIDE * 4;
         backend.enableVertexAttribArray(0);
         backend.vertexAttribPointer(0, 3, GlBackend.GL_FLOAT, false, meshStride, 0);
         backend.enableVertexAttribArray(1);
@@ -280,7 +245,7 @@ public final class InstancedMeshRenderer {
         backend.uniformMatrix4fv(uViewLoc, false, viewMatrixBuffer);
 
         backend.bindVertexArray(vao);
-        backend.drawArraysInstanced(GlBackend.GL_TRIANGLES, 0, 36, count);
+        backend.drawArraysInstanced(GlBackend.GL_TRIANGLES, 0, vertexCount, count);
 
         backend.bindVertexArray(0);
         backend.useProgram(0);
