@@ -111,17 +111,16 @@ public final class MatouEntity extends EntityPig implements Hittable {
     }
 
     @Override
-    public NBTTagCompound writeToNBT(NBTTagCompound compound) {
-        super.writeToNBT(compound);
+    protected void writeEntityToNBT(NBTTagCompound compound) {
+        super.writeEntityToNBT(compound);
         if (mob != null) {
             compound.setString(NBT_MOB, mob);
         }
-        return compound;
     }
 
     @Override
-    public void readFromNBT(NBTTagCompound compound) {
-        super.readFromNBT(compound);
+    protected void readEntityFromNBT(NBTTagCompound compound) {
+        super.readEntityFromNBT(compound);
         if (compound.hasKey(NBT_MOB)) {
             setMob(compound.getString(NBT_MOB));
         }

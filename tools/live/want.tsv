@@ -46,3 +46,8 @@ net/minecraft/util/DamageSource	getTrueSource	()Lnet/minecraft/entity/Entity;	me
 net/minecraft/util/math/Vec3d	x	D	field	0	field_72450_a
 net/minecraft/util/math/Vec3d	y	D	field	0	field_72448_b
 net/minecraft/util/math/Vec3d	z	D	field	0	field_72449_c
+net/minecraft/entity/passive/EntityPig	writeEntityToNBT	(Lnet/minecraft/nbt/NBTTagCompound;)V	method	0	func_70014_b
+net/minecraft/entity/passive/EntityPig	readEntityFromNBT	(Lnet/minecraft/nbt/NBTTagCompound;)V	method	0	func_70037_a
+net/minecraft/nbt/NBTTagCompound	hasKey	(Ljava/lang/String;)Z	method	0	func_74764_b
+net/minecraft/nbt/NBTTagCompound	getString	(Ljava/lang/String;)Ljava/lang/String;	method	0	
+net/minecraft/nbt/NBTTagCompound	setString	(Ljava/lang/String;Ljava/lang/String;)V	method	0	
