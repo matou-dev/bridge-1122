@@ -40,3 +40,9 @@ net/minecraft/entity/Entity	lastTickPosY	D	field	0	field_70137_T
 net/minecraft/entity/Entity	lastTickPosZ	D	field	0	field_70136_U
 net/minecraft/entity/Entity	rotationYaw	F	field	0	field_70177_z
 net/minecraft/entity/Entity	rotationPitch	F	field	0	field_70125_A
+net/minecraft/entity/Entity	getLookVec	()Lnet/minecraft/util/math/Vec3d;	method	0	func_70040_Z
+net/minecraft/entity/Entity	getEyeHeight	()F	method	0	func_70047_e
+net/minecraft/util/DamageSource	getTrueSource	()Lnet/minecraft/entity/Entity;	method	0	func_76346_g
+net/minecraft/util/math/Vec3d	x	D	field	0	field_72450_a
+net/minecraft/util/math/Vec3d	y	D	field	0	field_72448_b
+net/minecraft/util/math/Vec3d	z	D	field	0	field_72449_c

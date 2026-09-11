@@ -28,7 +28,7 @@
 # Reproducibility pins: installer / universal / vanilla server / MCP config /
 # ASM sha1 below. Any upstream drift fails loudly instead of running against
 # unknown bytes. 1.12.2 ships no srg-mcp.srg (ForgeGradle is not required):
-# the 42-line narrow map derives deterministically from the pinned vanilla
+# the 48-line narrow map derives deterministically from the pinned vanilla
 # server + joined.tsrg (see step 2), so the pins below are the whole
 # upstream surface.
 set -eu
@@ -156,20 +156,26 @@ echo "ok c3-live : vanilla client pinned ($CLIENT_PIN_SHA1)"
 #    World/loadedEntityList, EntityLivingBase/getEntityAttribute/
 #    getMaxHealth/setHealth, IAttributeInstance/setBaseValue,
 #    SharedMonsterAttributes/maxHealth).
+#    The combat tranche (hub decisions/VIRTUAL_HITBOXES.md, server
+#    weakspot hook) adds 6 rows: Entity/getLookVec + getEyeHeight (the
+#    attacker eye/look surface, owner Entity), DamageSource/getTrueSource
+#    (the true attacker behind the hurt source) and Vec3d/x/y/z (the
+#    look components) — the narrow map grows 42 -> 48 lines (40 server
+#    rows plus the 8 renderer rows below).
 #    The repop tranche (hub decisions/REPOP_SPIKE.md, T1 stone) adds no
 #    vanilla member: the break hook reads world/pos/state (Forge getters,
 #    pinned below) + isRemote/provider/getDimension (passthrough) +
 #    IBlockState/getBlock + Vec3i/getX/getY/getZ, the stone resolve and
 #    the sink land reuse getBlockFromName/getDefaultState/setBlockState —
-#    all pinned by earlier tranches, so the narrow map stays 42 lines
-#    (34 server rows plus the 8 renderer rows below).
+#    all pinned by earlier tranches, so the narrow map stays 48 lines
+#    (40 server rows plus the 8 renderer rows below).
 #    WorldProvider.getDimension is NOT mapped on purpose: it is Forge-added
 #    (11 readable call sites in the pinned universal, e.g. DimensionManager),
 #    hence runtime-final — Reobf passes it through by design, and the live
 #    verdict proves it behaviorally (a wrong dim gate skips every tick, so
 #    the world would come back empty, never silently wrong).
 # Mechanics live in hub/tools/live-derive.sh (era 1.12), rows in
-# tools/live/want.tsv — same 42 lines, byte-identical output.
+# tools/live/want.tsv — same 48 lines, byte-identical output.
 SRG_NARROW="$C3_DIR/srg-narrow.srg"
 live_derive_mcp_anchor "$C3_DIR/mcp_config-1.12.2.zip" "$MCSERV" "$J8/javap" "$SRG_NARROW" "$MCCLIENT" "tools/live/want.tsv"
 # 2b. Pin every derived line: a derivation the SRG does not confirm is a loud
@@ -216,10 +222,16 @@ pin_field "net/minecraft/entity/Entity/lastTickPosY"
 pin_field "net/minecraft/entity/Entity/lastTickPosZ"
 pin_field "net/minecraft/entity/Entity/rotationYaw"
 pin_field "net/minecraft/entity/Entity/rotationPitch"
+pin_method "net/minecraft/entity/Entity/getLookVec" "()Lnet/minecraft/util/math/Vec3d;"
+pin_method "net/minecraft/entity/Entity/getEyeHeight" "()F"
+pin_method "net/minecraft/util/DamageSource/getTrueSource" "()Lnet/minecraft/entity/Entity;"
+pin_field "net/minecraft/util/math/Vec3d/x"
+pin_field "net/minecraft/util/math/Vec3d/y"
+pin_field "net/minecraft/util/math/Vec3d/z"
 grep -q "getDimension" "$SRG_NARROW" \
   && { echo "FAIL c3-live : getDimension must stay unmapped (Forge-added, runtime-final)"; exit 1; }
-[ "$(grep -c . "$SRG_NARROW")" = "42" ] \
-  || { echo "FAIL c3-live : narrow map drift (want 42 lines)"; exit 1; }
+[ "$(grep -c . "$SRG_NARROW")" = "48" ] \
+  || { echo "FAIL c3-live : narrow map drift (want 48 lines)"; exit 1; }
 echo "ok c3-live : stubs pinned to derived SRG"
 
 # 2c. Pin every stubbed Forge member against the provisioned 2860 universal.
@@ -250,6 +262,10 @@ pin_uni 'net.minecraftforge.event.world.BlockEvent$BreakEvent' 'BreakEvent('
 pin_uni 'net.minecraftforge.event.world.BlockEvent$HarvestDropsEvent' 'HarvestDropsEvent('
 pin_uni 'net.minecraftforge.event.entity.living.LivingEvent' 'getEntityLiving('
 pin_uni 'net.minecraftforge.event.entity.living.LivingDropsEvent' 'LivingDropsEvent('
+pin_uni 'net.minecraftforge.event.entity.living.LivingHurtEvent' 'LivingHurtEvent('
+pin_uni 'net.minecraftforge.event.entity.living.LivingHurtEvent' 'getSource('
+pin_uni 'net.minecraftforge.event.entity.living.LivingHurtEvent' 'getAmount('
+pin_uni 'net.minecraftforge.event.entity.living.LivingHurtEvent' 'setAmount('
 pin_uni 'net.minecraftforge.event.entity.EntityJoinWorldEvent' 'EntityJoinWorldEvent('
 pin_uni 'net.minecraftforge.event.entity.EntityJoinWorldEvent' 'getWorld('
 pin_uni 'net.minecraftforge.event.entity.EntityEvent' 'getEntity('
@@ -516,10 +532,13 @@ live_boot "$SERV" "$BOOT_SECS" "boot-c3.log" "$J8/java" -Xmx1G -jar "$UNI" nogui
 #    the rolling server log — FML splits output across both). E_MODEL rides
 #    the grep: the model path is client-only, so any model refusal on the
 #    server is a no-regression breach, never a silent pass (hub
-#    decisions/MATOU_MODEL.md, server half of the live proof).
+#    decisions/MATOU_MODEL.md, server half of the live proof). E_HIT rides
+#    it too: the combat hook refuses corrupt attacker state loudly out of
+#    SPI (hub decisions/VIRTUAL_HITBOXES.md) — a NaN eye that passed would
+#    mean a defaulted multiplier somewhere.
 LOGS="$SERV/boot-c3.log"
 [ -f "$SERV/logs/latest.log" ] && LOGS="$LOGS $SERV/logs/latest.log"
-live_verdict "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|Encountered an unexpected exception" "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|Caused by" $LOGS
+live_verdict "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|E_HIT\|Encountered an unexpected exception" "NoSuchMethodError\|NoSuchFieldError\|E_FORGE\|E_BRIDGE\|E_EXAMPLE\|E_REG\|E_LOOT\|E_SPAWN\|E_MODEL\|E_HIT\|Caused by" $LOGS
 
 # 7. Positive proof: world blocks in chunks (0..1, -1..1) at y=60..61
 #    plus y=63..65 must equal the pure decision union — nothing foreign,

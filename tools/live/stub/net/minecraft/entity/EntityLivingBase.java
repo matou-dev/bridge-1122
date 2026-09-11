@@ -22,6 +22,18 @@ public class EntityLivingBase extends Entity {
         return 0.0f;
     }
 
+    /**
+     * Combat-companion compile stub: the autoplay combat leg polls the
+     * struck beast health through this declaring type (owner discipline,
+     * hub decisions/LOOT.md) — {@code getHealth} is
+     * {@code func_110143_aJ ()F}, measured via javap against the pinned
+     * notch server jar (the same-descriptor {@code func_110138_aP}
+     * max-health sibling is NOT this, hence the SRG anchor). Never runs.
+     */
+    public float getHealth() {
+        return 0.0f;
+    }
+
     public void setHealth(float health) {
     }
 }

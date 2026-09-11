@@ -1,5 +1,6 @@
 package net.minecraft.entity;
 
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
 /**
@@ -32,5 +33,22 @@ public class Entity {
     }
 
     public void setDead() {
+    }
+
+    /**
+     * Combat compile stub: 2860 {@code Entity} declares the attacker
+     * eye/look surface the bridge combat hook reads through this
+     * declaring type (owner discipline, hub decisions/LOOT.md) —
+     * {@code getLookVec} is {@code func_70040_Z ()->Vec3d} and
+     * {@code getEyeHeight} is {@code func_70047_e ()F}, both measured
+     * via javap against the pinned notch server jar (obf owners
+     * {@code vg/aJ} and {@code vg/by}). Never runs.
+     */
+    public Vec3d getLookVec() {
+        return null;
+    }
+
+    public float getEyeHeight() {
+        return 0.0f;
     }
 }

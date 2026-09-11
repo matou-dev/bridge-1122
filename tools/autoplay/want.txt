@@ -46,3 +46,13 @@ F net/minecraft/entity/Entity posX field_70165_t D 0
 F net/minecraft/entity/Entity posY field_70163_u D 0
 F net/minecraft/entity/Entity posZ field_70161_v D 0
 M net/minecraft/item/Item getByNameOrId func_111206_d (Ljava/lang/String;)Lnet/minecraft/item/Item; 1
+# Combat proof (COMBAT=1, rides a SPAWN=1 run): the companion teleports
+# the joined player beside the first bridge-landed beast, aims at the
+# head bone parsed pure from the shipped shape, and drives the genuine
+# vanilla attack path (attackTargetEntityWithCurrentItem — the event the
+# bridge hook refines), then polls the struck health through
+# EntityLivingBase/getHealth (the attacker eye it aimed from reads
+# through Entity/getEyeHeight, declaring type). Same derive practice.
+M net/minecraft/entity/player/EntityPlayer attackTargetEntityWithCurrentItem func_71059_n (Lnet/minecraft/entity/Entity;)V 0
+M net/minecraft/entity/EntityLivingBase getHealth func_110143_aJ ()F 0
+M net/minecraft/entity/Entity getEyeHeight func_70047_e ()F 0
