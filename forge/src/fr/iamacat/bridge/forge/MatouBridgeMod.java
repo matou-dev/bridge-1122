@@ -388,9 +388,9 @@ public final class MatouBridgeMod {
     }
 
     /**
-     * Combat wiring: the weakspot table plus the reach attribute from
-     * the first wire's pack policy (parsed once at pack wire time, like
-     * loot/spawn — never on the tick path). The table seals into the
+     * Combat wiring: the per-mob weakspot tables plus the reach
+     * attributes from the first wire's pack policy (parsed once at pack
+     * wire time, like loot/spawn — never on the tick path). The tables seal into the
      * bridge model holder the beast reads at hit time; the reach lands
      * on the hook's ray-test cutoff — content reach unless the operator
      * {@code combat.reach} wins (reach-override tranche, hub
@@ -405,7 +405,15 @@ public final class MatouBridgeMod {
             return;
         }
         PolicyPack policy = policy("E_COMBAT_POLICY");
-        BeastModel.sealWeakspots(policy.combatWeakspots());
+        Map<String, Map<String, Float>> perMobWeakspots =
+                new LinkedHashMap<String, Map<String, Float>>();
+        Map<String, Double> perMobReach =
+                new LinkedHashMap<String, Double>();
+        for (String mob : policy.combatMobs()) {
+            perMobWeakspots.put(mob, policy.combatWeakspots(mob));
+            perMobReach.put(mob, Double.valueOf(policy.combatReach(mob)));
+        }
+        BeastModel.sealCombat(perMobWeakspots, perMobReach);
         combatReach = OperatorPolicy.effectiveCombatReach(
                 policy.combatReach(), specs);
         String combatNote = OperatorPolicy.present(specs,
