@@ -260,11 +260,11 @@ WANT = [
     ("net/minecraft/client/Minecraft", "getMinecraft", "()Lnet/minecraft/client/Minecraft;", "method", True, "func_71410_x"),
     ("net/minecraft/client/Minecraft", "world", "Lnet/minecraft/client/multiplayer/WorldClient;", "field", False, "field_71441_e"),
     ("net/minecraft/client/Minecraft", "getRenderViewEntity", "()Lnet/minecraft/entity/Entity;", "method", False, "func_175606_aa"),
-    ("net/minecraft/entity/Entity", "lastTickPosX", "D", "field", False),
-    ("net/minecraft/entity/Entity", "lastTickPosY", "D", "field", False),
-    ("net/minecraft/entity/Entity", "lastTickPosZ", "D", "field", False),
-    ("net/minecraft/entity/Entity", "rotationYaw", "F", "field", False),
-    ("net/minecraft/entity/Entity", "rotationPitch", "F", "field", False),
+    ("net/minecraft/entity/Entity", "lastTickPosX", "D", "field", False, "field_70142_S"),
+    ("net/minecraft/entity/Entity", "lastTickPosY", "D", "field", False, "field_70137_T"),
+    ("net/minecraft/entity/Entity", "lastTickPosZ", "D", "field", False, "field_70136_U"),
+    ("net/minecraft/entity/Entity", "rotationYaw", "F", "field", False, "field_70177_z"),
+    ("net/minecraft/entity/Entity", "rotationPitch", "F", "field", False, "field_70125_A"),
 ]
 srg2obf, classes = {}, {}
 cur = None
