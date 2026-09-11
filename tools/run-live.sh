@@ -252,11 +252,13 @@ WANT = [
     # derive re-verifies it — never recalled. Found live 2026-09-11: the
     # first RenderWorldLastEvent crashed the client (NoSuchMethodError
     # getMinecraft) because the map covered server refs only. world is
-    # WorldClient-typed (field_71438_f) — field_71439_g is the player —
-    # and getRenderViewEntity is func_175606_aa (all measured via javap
-    # on the pinned client bytes, never recalled).
+    # the single WorldClient-typed field (field_71441_e — field_71439_g
+    # is the player and field_71438_f the renderGlobal, both misread
+    # from memory first; stable-39 fields.csv corroborates) and
+    # getRenderViewEntity is func_175606_aa (all measured via javap on
+    # the pinned client bytes, never recalled).
     ("net/minecraft/client/Minecraft", "getMinecraft", "()Lnet/minecraft/client/Minecraft;", "method", True, "func_71410_x"),
-    ("net/minecraft/client/Minecraft", "world", "Lnet/minecraft/client/multiplayer/WorldClient;", "field", False, "field_71438_f"),
+    ("net/minecraft/client/Minecraft", "world", "Lnet/minecraft/client/multiplayer/WorldClient;", "field", False, "field_71441_e"),
     ("net/minecraft/client/Minecraft", "getRenderViewEntity", "()Lnet/minecraft/entity/Entity;", "method", False, "func_175606_aa"),
     ("net/minecraft/entity/Entity", "lastTickPosX", "D", "field", False),
     ("net/minecraft/entity/Entity", "lastTickPosY", "D", "field", False),
