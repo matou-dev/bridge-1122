@@ -311,7 +311,11 @@ def javap_flags(cls, jar):
                 static = bool(re.search(r"\bstatic\b", s.split("(")[0]))
                 name = m.group(1)
             elif "(" not in s and s.endswith(";") and "{" not in s:
-                m2 = re.match(r"(?:(.*)\s)?([\w.$\[\]<>, ]+?)\s+([\w$]+);", s)
+                # Field type class carries ? and & too: the client jar's
+                # Minecraft spells Queue<FutureTask<?>> with wildcard
+                # bounds (same fix as the hub run-client.sh autoplay
+                # derive, C3 proof).
+                m2 = re.match(r"(?:(.*)\s)?([\w.$\[\]<>, ?&]+?)\s+([\w$]+);", s)
                 assert m2, "E_SRG_DERIVE:unparsed javap line <%s> in <%s>" % (s, cls)
                 static = bool(re.search(r"\bstatic\b", m2.group(1) or ""))
                 name = m2.group(3)
