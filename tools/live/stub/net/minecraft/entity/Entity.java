@@ -1,5 +1,6 @@
 package net.minecraft.entity;
 
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
@@ -50,5 +51,20 @@ public class Entity {
 
     public float getEyeHeight() {
         return 0.0f;
+    }
+
+    /**
+     * Spawn-identity compile stub: 2860 {@code Entity} declares the
+     * persist surface the bridge beast extends with its short mob name
+     * ({@code writeToNBT} is {@code func_70014_b}, {@code readFromNBT}
+     * is {@code func_70037_a}, both measured via javap against the
+     * pinned bytes at the live port — hub decisions/SPAWN.md). Never
+     * runs.
+     */
+    public NBTTagCompound writeToNBT(NBTTagCompound compound) {
+        return null;
+    }
+
+    public void readFromNBT(NBTTagCompound compound) {
     }
 }

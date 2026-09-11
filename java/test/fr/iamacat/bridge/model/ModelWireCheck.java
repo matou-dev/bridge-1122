@@ -149,9 +149,12 @@ public final class ModelWireCheck {
      * {@code SpawnCheck}/{@code LootCheck}, no new gate.
      */
     private static void testCombatReachOverride() {
-        double content = CombatTable.fromFile(
-                "../example1/content/owned.matou").reach();
-        check(content == 4.0, "content reach is 4.0");
+        CombatTable owned = CombatTable.fromFile(
+                "../example1/content/owned.matou");
+        check(owned.reach("my_beast") == 4.0
+                && owned.reach("my_brute") == 5.0,
+                "content reach is 4.0 beast 5.0 brute");
+        double content = owned.reach("my_beast");
         check(OperatorPolicy.effectiveCombatReach(content,
                 specs(spec("example1:my_ore"))) == 4.0,
                 "operator absent means content reach");
