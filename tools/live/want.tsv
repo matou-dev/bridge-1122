@@ -41,6 +41,8 @@ net/minecraft/entity/Entity	lastTickPosZ	D	field	0	field_70136_U
 net/minecraft/entity/Entity	rotationYaw	F	field	0	field_70177_z
 net/minecraft/entity/Entity	rotationPitch	F	field	0	field_70125_A
 net/minecraft/entity/Entity	ticksExisted	I	field	0	field_70173_aa
+net/minecraft/entity/Entity	distanceWalkedModified	F	field	0	field_70140_Q
+net/minecraft/entity/Entity	prevDistanceWalkedModified	F	field	0	field_70141_P
 net/minecraft/entity/Entity	getLookVec	()Lnet/minecraft/util/math/Vec3d;	method	0	func_70040_Z
 net/minecraft/entity/Entity	getEyeHeight	()F	method	0	func_70047_e
 net/minecraft/util/DamageSource	getTrueSource	()Lnet/minecraft/entity/Entity;	method	0	func_76346_g
