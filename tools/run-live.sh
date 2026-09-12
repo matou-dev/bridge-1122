@@ -178,13 +178,17 @@ echo "ok c3-live : vanilla client pinned ($CLIENT_PIN_SHA1)"
 #    instead) and NBTTagCompound/hasKey + getString + setString (the
 #    string-tag surface) — the narrow map grows 48 -> 53 lines (45
 #    server rows plus the 8 renderer rows below).
+#    The animation tranche (hub decisions/MATOU_ANIMATION.md, posed
+#    hitboxes on the entity-age clock) adds 1 row: Entity/ticksExisted
+#    (the walk-clock field, owner Entity) — the narrow map grows
+#    53 -> 54 lines (46 server rows plus the 8 renderer rows below).
 #    WorldProvider.getDimension is NOT mapped on purpose: it is Forge-added
 #    (11 readable call sites in the pinned universal, e.g. DimensionManager),
 #    hence runtime-final — Reobf passes it through by design, and the live
 #    verdict proves it behaviorally (a wrong dim gate skips every tick, so
 #    the world would come back empty, never silently wrong).
 # Mechanics live in hub/tools/live-derive.sh (era 1.12), rows in
-# tools/live/want.tsv — same 53 lines, byte-identical output.
+# tools/live/want.tsv — same 54 lines, byte-identical output.
 SRG_NARROW="$C3_DIR/srg-narrow.srg"
 live_derive_mcp_anchor "$C3_DIR/mcp_config-1.12.2.zip" "$MCSERV" "$J8/javap" "$SRG_NARROW" "$MCCLIENT" "tools/live/want.tsv"
 # 2b. Pin every derived line: a derivation the SRG does not confirm is a loud
@@ -231,6 +235,7 @@ pin_field "net/minecraft/entity/Entity/lastTickPosY"
 pin_field "net/minecraft/entity/Entity/lastTickPosZ"
 pin_field "net/minecraft/entity/Entity/rotationYaw"
 pin_field "net/minecraft/entity/Entity/rotationPitch"
+pin_field "net/minecraft/entity/Entity/ticksExisted"
 pin_method "net/minecraft/entity/Entity/getLookVec" "()Lnet/minecraft/util/math/Vec3d;"
 pin_method "net/minecraft/entity/Entity/getEyeHeight" "()F"
 pin_method "net/minecraft/util/DamageSource/getTrueSource" "()Lnet/minecraft/entity/Entity;"
@@ -244,8 +249,8 @@ pin_method "net/minecraft/nbt/NBTTagCompound/getString" "(Ljava/lang/String;)Lja
 pin_method "net/minecraft/nbt/NBTTagCompound/setString" "(Ljava/lang/String;Ljava/lang/String;)V"
 grep -q "getDimension" "$SRG_NARROW" \
   && { echo "FAIL c3-live : getDimension must stay unmapped (Forge-added, runtime-final)"; exit 1; }
-[ "$(grep -c . "$SRG_NARROW")" = "53" ] \
-  || { echo "FAIL c3-live : narrow map drift (want 53 lines)"; exit 1; }
+[ "$(grep -c . "$SRG_NARROW")" = "54" ] \
+  || { echo "FAIL c3-live : narrow map drift (want 54 lines)"; exit 1; }
 echo "ok c3-live : stubs pinned to derived SRG"
 
 # 2c. Pin every stubbed Forge member against the provisioned 2860 universal.
