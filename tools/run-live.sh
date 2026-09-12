@@ -536,8 +536,12 @@ rm -rf "$SERV/matou-content" && cp -r ../example1/content "$SERV/matou-content"
 printf 'fr.iamacat.example1.ExamplePack 63 example1:my_ore ownedFile=%s/matou-content/owned.matou scatterFile=%s/matou-content/additive.matou structureFile=%s/matou-content/structure.matou block.example1.structures:hut_wall=minecraft:stone block.example1.structures:hut_roof=minecraft:stone veinFile=%s/matou-content/vein.matou veinblock.example1.content:my_ore=example1:my_ore\n' "$SERV" "$SERV" "$SERV" "$SERV" > "$SERV/config/matoubridge/packs.cfg"
 # Beast shape: the shipped Blockbench geometry the renderer bakes and the
 # hitboxes derive from (hub decisions/MATOU_MODEL.md). Deployed beside
-# packs.cfg, operator-replaceable like it.
-cp tools/live/my_beast.geo.json "$SERV/config/matoubridge/my_beast.geo.json"
+# packs.cfg, operator-replaceable like it. ROTATED_GEO overlays the
+# rotated-content proof asset as my_beast.geo.json (rotation live-proof
+# tranche — proof-only, never shipped in dist/).
+GEO_SRC="tools/live/my_beast.geo.json"
+[ -n "${ROTATED_GEO:-}" ] && GEO_SRC="$ROTATED_GEO"
+cp "$GEO_SRC" "$SERV/config/matoubridge/my_beast.geo.json"
 # Beast texture: the shipped 64x64 skin the V2 renderer samples (hub
 # decisions/MATOU_MODEL.md). Deployed beside the geometry,
 # operator-replaceable like it.
